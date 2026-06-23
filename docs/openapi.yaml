@@ -1,0 +1,300 @@
+openapi: 3.1.0
+info:
+  title: Ăn Gì Giờ? API
+  version: 0.1.0
+  description: REST contract cho Recipe Catalog — Giai đoạn 1.
+servers:
+  - url: http://localhost:4000
+    description: Local development
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Kiểm tra trạng thái API
+      responses:
+        "200":
+          description: API hoạt động
+  /api/v1/categories:
+    get:
+      tags: [Categories]
+      summary: Lấy danh sách danh mục
+      responses:
+        "200":
+          description: Danh sách danh mục theo thứ tự hiển thị
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    type: boolean
+                    const: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Category"
+  /api/v1/recipes:
+    get:
+      tags: [Recipes]
+      summary: Lấy danh sách công thức đã xuất bản
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - name: category
+          in: query
+          description: Slug hoặc tên danh mục
+          schema:
+            type: string
+          examples:
+            slug:
+              value: mon-xao
+            name:
+              value: Món xào
+        - name: difficulty
+          in: query
+          description: Có thể lặp lại để lọc nhiều độ khó
+          schema:
+            oneOf:
+              - $ref: "#/components/schemas/RecipeDifficulty"
+              - type: array
+                items:
+                  $ref: "#/components/schemas/RecipeDifficulty"
+        - name: maxCookTimeMinutes
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1440
+        - name: servings
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [difficulty-asc, cook-time-asc, newest]
+            default: difficulty-asc
+      responses:
+        "200":
+          description: Danh sách công thức và metadata phân trang
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data, meta]
+                properties:
+                  success:
+                    type: boolean
+                    const: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RecipeSummary"
+                  meta:
+                    $ref: "#/components/schemas/PaginationMeta"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+  /api/v1/recipes/{slug}:
+    get:
+      tags: [Recipes]
+      summary: Lấy chi tiết công thức theo slug
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+      responses:
+        "200":
+          description: Chi tiết công thức
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    type: boolean
+                    const: true
+                  data:
+                    $ref: "#/components/schemas/RecipeDetail"
+        "404":
+          description: Không tìm thấy công thức
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 12
+  responses:
+    ValidationError:
+      description: Query hoặc path parameter không hợp lệ
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    Category:
+      type: object
+      required: [id, slug, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+          enum:
+            - Món xào
+            - Món canh
+            - Món chiên
+            - Món hấp
+            - Món chay
+            - Tráng miệng
+    RecipeDifficulty:
+      type: string
+      enum: [de, trung-binh, kho]
+    RecipeSummary:
+      type: object
+      required:
+        - id
+        - slug
+        - title
+        - description
+        - image
+        - imageAlt
+        - difficulty
+        - cookTimeMinutes
+        - baseServings
+        - category
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        image:
+          type: string
+        imageAlt:
+          type: string
+        difficulty:
+          $ref: "#/components/schemas/RecipeDifficulty"
+        cookTimeMinutes:
+          type: integer
+        baseServings:
+          type: integer
+        category:
+          type: string
+    RecipeIngredient:
+      type: object
+      required: [id, name, baseAmount, unit, prepNote, haveIt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        baseAmount:
+          type: number
+        unit:
+          type: string
+        prepNote:
+          type: string
+        haveIt:
+          type: boolean
+          description: Giai đoạn 1 luôn false; Giai đoạn 2 sẽ tính từ search session.
+    RecipeStep:
+      type: object
+      required:
+        - id
+        - content
+        - estimatedMinutes
+        - isTricky
+        - techniqueIcon
+        - timerSeconds
+      properties:
+        id:
+          type: string
+          format: uuid
+        content:
+          type: string
+        estimatedMinutes:
+          type: integer
+        isTricky:
+          type: boolean
+        techniqueIcon:
+          type: string
+          enum: [dao, chao, noi, tron, hap]
+        timerSeconds:
+          type: [integer, "null"]
+    RecipeDetail:
+      allOf:
+        - $ref: "#/components/schemas/RecipeSummary"
+        - type: object
+          required: [ingredients, steps, cookingTerms]
+          properties:
+            ingredients:
+              type: array
+              items:
+                $ref: "#/components/schemas/RecipeIngredient"
+            steps:
+              type: array
+              items:
+                $ref: "#/components/schemas/RecipeStep"
+            cookingTerms:
+              type: object
+              additionalProperties:
+                type: string
+    PaginationMeta:
+      type: object
+      required: [page, limit, total, totalPages]
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+    ErrorResponse:
+      type: object
+      required: [success, error]
+      properties:
+        success:
+          type: boolean
+          const: false
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details: {}
