@@ -8,7 +8,10 @@ export interface UpdateCookingSessionInput {
   servings?: number;
 }
 
-export type CookingHistorySort = "completed-at-desc" | "started-at-desc";
+export type CookingHistorySort =
+  | "completed-at-desc"
+  | "started-at-desc"
+  | "rating-desc";
 
 export interface CookingHistoryQuery {
   page: number;

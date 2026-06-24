@@ -10,6 +10,10 @@ erDiagram
   cooking_terms ||--o{ recipe_step_terms : explains
   app_users ||--o{ cooking_sessions : starts
   recipes ||--o{ cooking_sessions : cooked_as
+  cooking_sessions ||--o| cooking_feedback : receives
+  recipes ||--o{ cooking_feedback : rated_by
+  app_users ||--o{ cooking_feedback : submits
+  app_users ||--o| user_personalization_insights : learns
 
   categories {
     uuid id PK
@@ -83,5 +87,26 @@ erDiagram
     timestamptz started_at
     timestamptz completed_at
     cooking_session_status status
+  }
+
+  cooking_feedback {
+    uuid id PK
+    uuid user_id FK
+    uuid cooking_session_id FK,UK
+    uuid recipe_id FK
+    smallint rating
+    feedback_issue_array issues
+    text note
+  }
+
+  user_personalization_insights {
+    uuid user_id PK,FK
+    integer feedback_count
+    numeric average_rating
+    numeric confidence
+    numeric easy_recipe_boost
+    numeric quick_recipe_boost
+    numeric ingredient_match_boost
+    numeric technique_guidance_boost
   }
 ```

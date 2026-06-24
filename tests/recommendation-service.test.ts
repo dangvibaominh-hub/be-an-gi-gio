@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { RECIPE_CATEGORIES } from "../src/modules/recipes/recipe.model.js";
 import type { RecipeGenerationAdapter } from "../src/modules/recommendations/gemini-recipe.adapter.js";
+import type { PersonalizationRepository } from "../src/modules/feedback/feedback.repository.js";
 import type { RecommendationRepository } from "../src/modules/recommendations/recommendation.repository.js";
 import type {
   GeneratedRecipeRepository,
@@ -115,6 +116,107 @@ describe("RecommendationService", () => {
 
     expect(result.source).toBe("database");
     expect(geminiCalled).toBe(false);
+  });
+
+  it("reranks recommendations with personalization preferences", async () => {
+    const personalizedRepository: RecommendationRepository = {
+      listCandidates() {
+        return Promise.resolve([
+          {
+            id: "recipe-hard",
+            slug: "ga-chien-gion",
+            title: "Ga Chien Gion",
+            description: "Mon chien nhieu dau.",
+            image: "/images/recipes/ga-chien-gion.png",
+            imageAlt: "Ga chien gion",
+            difficulty: "kho",
+            cookTimeMinutes: 60,
+            baseServings: 4,
+            category: "Món chiên",
+            ingredients: [
+              {
+                id: "ingredient-1",
+                name: "Dau hu",
+                normalizedName: "dau hu",
+                aliases: [],
+              },
+            ],
+          },
+          {
+            id: "recipe-easy",
+            slug: "dau-hu-hap-hanh",
+            title: "Dau Hu Hap Hanh",
+            description: "Mon hap nhanh, it dau.",
+            image: "/images/recipes/dau-hu-hap-hanh.png",
+            imageAlt: "Dau hu hap hanh",
+            difficulty: "de",
+            cookTimeMinutes: 15,
+            baseServings: 2,
+            category: "Món hấp",
+            ingredients: [
+              {
+                id: "ingredient-1",
+                name: "Dau hu",
+                normalizedName: "dau hu",
+                aliases: [],
+              },
+              {
+                id: "ingredient-2",
+                name: "Hanh la",
+                normalizedName: "hanh la",
+                aliases: [],
+              },
+            ],
+          },
+        ]);
+      },
+    };
+    const personalizationRepository: PersonalizationRepository = {
+      getInsight() {
+        return Promise.resolve({
+          feedbackCount: 5,
+          averageRating: 3.4,
+          confidence: 1,
+          signals: {
+            preferEasyRecipes: 0.08,
+            preferQuickRecipes: 0.08,
+            preferIngredientFit: 0.08,
+            preferTechniqueGuidance: 0.08,
+          },
+          issueCounts: {
+            "cutting-meat-hard": 5,
+            "oil-splatter": 5,
+            "took-longer-than-expected": 5,
+            "missing-ingredients": 5,
+          },
+          insights: [],
+          updatedAt: new Date(0).toISOString(),
+        });
+      },
+    };
+    const service = new RecommendationService(
+      personalizedRepository,
+      0,
+      undefined,
+      undefined,
+      undefined,
+      personalizationRepository,
+    );
+
+    const result = await service.recommend(
+      {
+        ingredients: ["dau hu"],
+        filters: {},
+        page: 1,
+        limit: 12,
+      },
+      "user-1",
+    );
+
+    expect(result.items[0]?.slug).toBe("dau-hu-hap-hanh");
+    expect(result.items[0]?.match.score).toBeGreaterThan(
+      result.items[1]?.match.score ?? 0,
+    );
   });
 
   it("generates and saves a pending Gemini recipe when database matching is empty", async () => {

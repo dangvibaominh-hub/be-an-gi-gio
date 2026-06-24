@@ -414,6 +414,38 @@ paths:
           $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
+  /api/v1/cooking-sessions/{id}/feedback:
+    post:
+      tags: [Feedback]
+      security:
+        - bearerAuth: []
+      summary: Gui feedback sau khi hoan thanh phien nau
+      description: >
+        Moi phien nau da hoan thanh co mot feedback. Goi lai endpoint nay se cap
+        nhat feedback va tinh lai personalization insight cua user.
+      parameters:
+        - $ref: "#/components/parameters/CookingSessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitFeedbackRequest"
+      responses:
+        "201":
+          description: Feedback da duoc luu
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmitFeedbackResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
   /api/v1/me/cooking-history:
     get:
       tags: [CookingSessions]
@@ -427,7 +459,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [completed-at-desc, started-at-desc]
+            enum: [completed-at-desc, started-at-desc, rating-desc]
             default: completed-at-desc
       responses:
         "200":
@@ -449,6 +481,21 @@ paths:
                     $ref: "#/components/schemas/PaginationMeta"
         "400":
           $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Error"
+  /api/v1/me/personalization:
+    get:
+      tags: [Feedback]
+      security:
+        - bearerAuth: []
+      summary: Lay insight ca nhan hoa cua user hien tai
+      responses:
+        "200":
+          description: Insight ca nhan hoa tu feedback da gui
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PersonalizationResponse"
         "401":
           $ref: "#/components/responses/Error"
   /api/v1/recipes/{slug}:
@@ -864,6 +911,162 @@ components:
           type: integer
           minimum: 1
           maximum: 100
+    FeedbackIssue:
+      type: string
+      enum:
+        - cutting-meat-hard
+        - oil-splatter
+        - took-longer-than-expected
+        - missing-ingredients
+    SubmitFeedbackRequest:
+      type: object
+      required: [rating]
+      properties:
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        issues:
+          type: array
+          maxItems: 4
+          uniqueItems: true
+          default: []
+          items:
+            $ref: "#/components/schemas/FeedbackIssue"
+        note:
+          type: string
+          maxLength: 1000
+    CookingFeedback:
+      type: object
+      required:
+        - id
+        - cookingSessionId
+        - recipeId
+        - rating
+        - issues
+        - note
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        cookingSessionId:
+          type: string
+          format: uuid
+        recipeId:
+          type: string
+          format: uuid
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackIssue"
+        note:
+          type: [string, "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CookingFeedbackSummary:
+      type: object
+      required: [rating, issues, note, submittedAt]
+      properties:
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackIssue"
+        note:
+          type: [string, "null"]
+        submittedAt:
+          type: string
+          format: date-time
+    PersonalizationSignals:
+      type: object
+      required:
+        - preferEasyRecipes
+        - preferQuickRecipes
+        - preferIngredientFit
+        - preferTechniqueGuidance
+      properties:
+        preferEasyRecipes:
+          type: number
+          minimum: 0
+          maximum: 1
+        preferQuickRecipes:
+          type: number
+          minimum: 0
+          maximum: 1
+        preferIngredientFit:
+          type: number
+          minimum: 0
+          maximum: 1
+        preferTechniqueGuidance:
+          type: number
+          minimum: 0
+          maximum: 1
+    FeedbackIssueCounts:
+      type: object
+      required:
+        - cutting-meat-hard
+        - oil-splatter
+        - took-longer-than-expected
+        - missing-ingredients
+      properties:
+        cutting-meat-hard:
+          type: integer
+          minimum: 0
+        oil-splatter:
+          type: integer
+          minimum: 0
+        took-longer-than-expected:
+          type: integer
+          minimum: 0
+        missing-ingredients:
+          type: integer
+          minimum: 0
+    PersonalizationInsight:
+      type: object
+      required:
+        - feedbackCount
+        - averageRating
+        - confidence
+        - signals
+        - issueCounts
+        - insights
+        - updatedAt
+      properties:
+        feedbackCount:
+          type: integer
+          minimum: 0
+        averageRating:
+          type: number
+          minimum: 0
+          maximum: 5
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        signals:
+          $ref: "#/components/schemas/PersonalizationSignals"
+        issueCounts:
+          $ref: "#/components/schemas/FeedbackIssueCounts"
+        insights:
+          type: array
+          items:
+            type: string
+        updatedAt:
+          type: [string, "null"]
+          format: date-time
     CookingSessionStatus:
       type: string
       enum: [IN_PROGRESS, COMPLETED]
@@ -878,6 +1081,7 @@ components:
         - status
         - startedAt
         - completedAt
+        - feedback
         - updatedAt
       properties:
         id:
@@ -902,6 +1106,10 @@ components:
         completedAt:
           type: [string, "null"]
           format: date-time
+        feedback:
+          oneOf:
+            - $ref: "#/components/schemas/CookingFeedbackSummary"
+            - type: "null"
         updatedAt:
           type: string
           format: date-time
@@ -914,6 +1122,30 @@ components:
           const: true
         data:
           $ref: "#/components/schemas/CookingSession"
+    SubmitFeedbackResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/CookingFeedback"
+        meta:
+          type: object
+          required: [personalization]
+          properties:
+            personalization:
+              $ref: "#/components/schemas/PersonalizationInsight"
+    PersonalizationResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/PersonalizationInsight"
     PaginationMeta:
       type: object
       required: [page, limit, total, totalPages]

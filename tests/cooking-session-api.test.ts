@@ -268,6 +268,7 @@ function createSession(input: { id: string; servings: number }): CookingSessionM
     status: "IN_PROGRESS",
     startedAt: new Date("2026-01-01T00:00:00.000Z").toISOString(),
     completedAt: null,
+    feedback: null,
     updatedAt: new Date("2026-01-01T00:00:00.000Z").toISOString(),
   };
 }

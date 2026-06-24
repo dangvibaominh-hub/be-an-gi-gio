@@ -10,6 +10,12 @@ import type {
   RecommendationCandidateIngredient,
   RecommendationRepository,
 } from "./recommendation.repository.js";
+import type {
+  PersonalizationInsightModel,
+} from "../feedback/feedback.model.js";
+import type {
+  PersonalizationRepository,
+} from "../feedback/feedback.repository.js";
 import type { SavedRecipeRepository } from "../saved-recipes/saved-recipe.repository.js";
 import type { RecipeGenerationAdapter } from "./gemini-recipe.adapter.js";
 import type {
@@ -31,6 +37,7 @@ export class RecommendationService {
     private readonly savedRecipeRepository?: SavedRecipeRepository,
     private readonly recipeGenerationAdapter?: RecipeGenerationAdapter,
     private readonly generatedRecipeRepository?: GeneratedRecipeRepository,
+    private readonly personalizationRepository?: PersonalizationRepository,
   ) {}
 
   async recommend(
@@ -50,11 +57,20 @@ export class RecommendationService {
               (recipe) => recipe.slug,
             ),
           );
+    const personalization =
+      userId === undefined || this.personalizationRepository === undefined
+        ? undefined
+        : await this.personalizationRepository.getInsight(userId);
 
     const candidates = await this.repository.listCandidates(query.filters);
     const scoredCandidates = candidates
       .map((candidate) =>
-        scoreCandidate(candidate, inputs, savedRecipeSlugs.has(candidate.slug)),
+        scoreCandidate(
+          candidate,
+          inputs,
+          savedRecipeSlugs.has(candidate.slug),
+          personalization,
+        ),
       )
       .filter((candidate) => candidate.match.score >= this.matchThreshold)
       .sort(compareRecommendations);
@@ -89,6 +105,7 @@ export class RecommendationService {
       generatedCandidate,
       inputs,
       false,
+      personalization,
     );
 
     return {
@@ -139,6 +156,7 @@ function scoreCandidate(
   candidate: RecommendationCandidate,
   inputs: NormalizedInput[],
   isSavedRecipe: boolean,
+  personalization: PersonalizationInsightModel | undefined,
 ): RecipeRecommendationModel {
   const matchedInputIndexes = new Set<number>();
   const matchedIngredientIds = new Set<string>();
@@ -159,8 +177,16 @@ function scoreCandidate(
     candidate.ingredients.length === 0
       ? 0
       : matchedIngredientIds.size / candidate.ingredients.length;
+  const missingIngredients = candidate.ingredients
+    .filter((ingredient) => !matchedIngredientIds.has(ingredient.id))
+    .map((ingredient) => ingredient.name);
+  const baseScore =
+    inputCoverage * 0.7 + recipeCoverage * 0.3 + (isSavedRecipe ? 0.05 : 0);
   const score = roundScore(
-    Math.min(1, inputCoverage * 0.7 + recipeCoverage * 0.3 + (isSavedRecipe ? 0.05 : 0)),
+    clampScore(
+      baseScore +
+        personalizationAdjustment(candidate, missingIngredients, personalization),
+    ),
   );
 
   return {
@@ -179,11 +205,58 @@ function scoreCandidate(
       matchedIngredients: inputs
         .filter((_input, index) => matchedInputIndexes.has(index))
         .map((input) => input.original),
-      missingIngredients: candidate.ingredients
-        .filter((ingredient) => !matchedIngredientIds.has(ingredient.id))
-        .map((ingredient) => ingredient.name),
+      missingIngredients,
     },
   };
+}
+
+function personalizationAdjustment(
+  candidate: RecommendationCandidate,
+  missingIngredients: string[],
+  personalization: PersonalizationInsightModel | undefined,
+) {
+  if (personalization === undefined || personalization.confidence === 0) {
+    return 0;
+  }
+
+  const confidence = personalization.confidence;
+  const signals = personalization.signals;
+  let adjustment = 0;
+
+  const easySignal = signals.preferEasyRecipes * confidence;
+  if (candidate.difficulty === "de") {
+    adjustment += easySignal;
+  } else if (candidate.difficulty === "trung-binh") {
+    adjustment += easySignal / 2;
+  } else {
+    adjustment -= easySignal;
+  }
+
+  const quickSignal = signals.preferQuickRecipes * confidence;
+  if (candidate.cookTimeMinutes <= 20) {
+    adjustment += quickSignal;
+  } else if (candidate.cookTimeMinutes <= 30) {
+    adjustment += quickSignal / 2;
+  } else if (candidate.cookTimeMinutes > 45) {
+    adjustment -= quickSignal;
+  }
+
+  const fitSignal = signals.preferIngredientFit * confidence;
+  adjustment +=
+    missingIngredients.length === 0
+      ? fitSignal
+      : -Math.min(fitSignal, missingIngredients.length * 0.02);
+
+  const techniqueSignal = signals.preferTechniqueGuidance * confidence;
+  adjustment += isFryHeavy(candidate) ? -techniqueSignal : techniqueSignal / 2;
+
+  return adjustment;
+}
+
+function isFryHeavy(candidate: RecommendationCandidate) {
+  const normalizedCategory = normalizeIngredientName(candidate.category);
+
+  return normalizedCategory.includes("chien");
 }
 
 function ingredientMatchesInput(
@@ -221,6 +294,10 @@ function isTokenSubset(left: string[], right: string[]) {
 
 function roundScore(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+function clampScore(value: number) {
+  return Math.max(0, Math.min(1, value));
 }
 
 function compareRecommendations(

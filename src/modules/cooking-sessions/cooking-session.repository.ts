@@ -1,6 +1,7 @@
 import type { Pool } from "pg";
 
 import type { RecipeModel } from "../recipes/recipe.model.js";
+import type { FeedbackIssue } from "../feedback/feedback.model.js";
 import type {
   CookingSessionModel,
   CookingSessionStatus,
@@ -20,6 +21,10 @@ interface CookingSessionRow {
   started_at: Date;
   completed_at: Date | null;
   updated_at: Date;
+  feedback_rating: number | null;
+  feedback_issues: FeedbackIssue[] | null;
+  feedback_note: string | null;
+  feedback_submitted_at: Date | null;
   total_steps: string;
   recipe_id: string;
   slug: string;
@@ -162,7 +167,9 @@ export class PostgresCookingSessionRepository
     const total = Number(countResult.rows[0]?.total ?? 0);
     const offset = (query.page - 1) * query.limit;
     const sortSql =
-      query.sort === "started-at-desc"
+      query.sort === "rating-desc"
+        ? "cf.rating DESC NULLS LAST, cs.completed_at DESC, r.title"
+        : query.sort === "started-at-desc"
         ? "cs.started_at DESC, cs.completed_at DESC, r.title"
         : "cs.completed_at DESC, cs.started_at DESC, r.title";
 
@@ -199,6 +206,10 @@ function cookingSessionSelectFrom(sessionTable: string) {
       cs.started_at,
       cs.completed_at,
       cs.updated_at,
+      cf.rating AS feedback_rating,
+      cf.issues AS feedback_issues,
+      cf.note AS feedback_note,
+      cf.updated_at AS feedback_submitted_at,
       COUNT(rs.id) AS total_steps,
       r.id AS recipe_id,
       r.slug,
@@ -214,6 +225,7 @@ function cookingSessionSelectFrom(sessionTable: string) {
     JOIN recipes r ON r.id = cs.recipe_id
     JOIN categories c ON c.id = r.category_id
     LEFT JOIN recipe_steps rs ON rs.recipe_id = r.id
+    LEFT JOIN cooking_feedback cf ON cf.cooking_session_id = cs.id
   `;
 }
 
@@ -225,6 +237,10 @@ const cookingSessionGroupBy = `
   cs.started_at,
   cs.completed_at,
   cs.updated_at,
+  cf.rating,
+  cf.issues,
+  cf.note,
+  cf.updated_at,
   r.id,
   r.slug,
   r.title,
@@ -258,6 +274,15 @@ function mapCookingSessionRow(row: CookingSessionRow): CookingSessionModel {
     status: row.status,
     startedAt: row.started_at.toISOString(),
     completedAt: row.completed_at?.toISOString() ?? null,
+    feedback:
+      row.feedback_rating === null || row.feedback_submitted_at === null
+        ? null
+        : {
+            rating: row.feedback_rating,
+            issues: row.feedback_issues ?? [],
+            note: row.feedback_note,
+            submittedAt: row.feedback_submitted_at.toISOString(),
+          },
     updatedAt: row.updated_at.toISOString(),
   };
 }

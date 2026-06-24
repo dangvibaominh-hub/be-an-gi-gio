@@ -28,6 +28,6 @@ export const cookingHistoryQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(12),
   sort: z
-    .enum(["completed-at-desc", "started-at-desc"])
+    .enum(["completed-at-desc", "started-at-desc", "rating-desc"])
     .default("completed-at-desc"),
 });

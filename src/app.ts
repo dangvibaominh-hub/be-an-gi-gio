@@ -35,6 +35,15 @@ import {
 } from "./modules/cooking-sessions/cooking-session.routes.js";
 import { CookingSessionService } from "./modules/cooking-sessions/cooking-session.service.js";
 import {
+  PostgresFeedbackRepository,
+  type FeedbackRepository,
+} from "./modules/feedback/feedback.repository.js";
+import {
+  createCookingFeedbackRouter,
+  createPersonalizationRouter,
+} from "./modules/feedback/feedback.routes.js";
+import { FeedbackService } from "./modules/feedback/feedback.service.js";
+import {
   PostgresRecipeRepository,
   SupabaseRecipeRepository,
   type RecipeRepository,
@@ -75,6 +84,7 @@ export interface AppDependencies {
   authRepository?: AuthRepository;
   savedRecipeRepository?: SavedRecipeRepository;
   cookingSessionRepository?: CookingSessionRepository;
+  feedbackRepository?: FeedbackRepository;
 }
 
 export function createApp(dependencies: AppDependencies = {}) {
@@ -111,6 +121,8 @@ export function createApp(dependencies: AppDependencies = {}) {
   const cookingSessionRepository =
     dependencies.cookingSessionRepository ??
     new PostgresCookingSessionRepository(pool);
+  const feedbackRepository =
+    dependencies.feedbackRepository ?? new PostgresFeedbackRepository(pool);
   const recipeGenerationAdapter =
     dependencies.recipeGenerationAdapter ??
     createRecipeGenerationAdapter(
@@ -135,6 +147,7 @@ export function createApp(dependencies: AppDependencies = {}) {
   const cookingSessionService = new CookingSessionService(
     cookingSessionRepository,
   );
+  const feedbackService = new FeedbackService(feedbackRepository);
 
   app.disable("x-powered-by");
   app.use(helmet());
@@ -210,6 +223,7 @@ export function createApp(dependencies: AppDependencies = {}) {
         savedRecipeRepository,
         recipeGenerationAdapter,
         generatedRecipeRepository,
+        feedbackRepository,
       ),
       authService,
     ),
@@ -217,6 +231,10 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.use(
     "/api/v1/cooking-sessions",
     createCookingSessionRouter(authService, cookingSessionService),
+  );
+  app.use(
+    "/api/v1/cooking-sessions",
+    createCookingFeedbackRouter(authService, feedbackService),
   );
   app.use(
     "/api/v1/me/saved-recipes",
@@ -228,6 +246,10 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.use(
     "/api/v1/me/cooking-history",
     createCookingHistoryRouter(authService, cookingSessionService),
+  );
+  app.use(
+    "/api/v1/me/personalization",
+    createPersonalizationRouter(authService, feedbackService),
   );
 
   app.use(notFoundHandler);

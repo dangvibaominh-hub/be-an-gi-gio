@@ -1,4 +1,5 @@
 import type { RecipeModel } from "../recipes/recipe.model.js";
+import type { CookingFeedbackSummary } from "../feedback/feedback.model.js";
 
 export type CookingSessionStatus = "IN_PROGRESS" | "COMPLETED";
 
@@ -11,6 +12,7 @@ export interface CookingSessionModel {
   status: CookingSessionStatus;
   startedAt: string;
   completedAt: string | null;
+  feedback: CookingFeedbackSummary | null;
   updatedAt: string;
 }
 
