@@ -12,17 +12,54 @@ import YAML from "yaml";
 import { getEnv } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import { pool } from "./database/pool.js";
+import { createSupabaseServerClient } from "./database/supabase.js";
+import {
+  PostgresAuthRepository,
+  type AuthRepository,
+} from "./modules/auth/auth.repository.js";
+import { createAuthRouter, createMeRouter } from "./modules/auth/auth.routes.js";
+import { AuthService } from "./modules/auth/auth.service.js";
 import {
   PostgresCategoryRepository,
+  SupabaseCategoryRepository,
   type CategoryRepository,
 } from "./modules/categories/category.repository.js";
 import { createCategoryRouter } from "./modules/categories/category.routes.js";
 import {
+  PostgresCookingSessionRepository,
+  type CookingSessionRepository,
+} from "./modules/cooking-sessions/cooking-session.repository.js";
+import {
+  createCookingHistoryRouter,
+  createCookingSessionRouter,
+} from "./modules/cooking-sessions/cooking-session.routes.js";
+import { CookingSessionService } from "./modules/cooking-sessions/cooking-session.service.js";
+import {
   PostgresRecipeRepository,
+  SupabaseRecipeRepository,
   type RecipeRepository,
 } from "./modules/recipes/recipe.repository.js";
 import { createRecipeRouter } from "./modules/recipes/recipe.routes.js";
 import { RecipeService } from "./modules/recipes/recipe.service.js";
+import {
+  PostgresGeneratedRecipeRepository,
+  PostgresRecommendationRepository,
+  SupabaseRecommendationRepository,
+  type GeneratedRecipeRepository,
+  type RecommendationRepository,
+} from "./modules/recommendations/recommendation.repository.js";
+import {
+  GeminiRecipeGenerationAdapter,
+  type RecipeGenerationAdapter,
+} from "./modules/recommendations/gemini-recipe.adapter.js";
+import { createRecommendationRouter } from "./modules/recommendations/recommendation.routes.js";
+import { RecommendationService } from "./modules/recommendations/recommendation.service.js";
+import {
+  PostgresSavedRecipeRepository,
+  type SavedRecipeRepository,
+} from "./modules/saved-recipes/saved-recipe.repository.js";
+import { createSavedRecipeRouter } from "./modules/saved-recipes/saved-recipe.routes.js";
+import { SavedRecipeService } from "./modules/saved-recipes/saved-recipe.service.js";
 import { indexRouter } from "./routes/index.routes.js";
 import {
   errorHandler,
@@ -32,6 +69,12 @@ import {
 export interface AppDependencies {
   categoryRepository?: CategoryRepository;
   recipeRepository?: RecipeRepository;
+  recommendationRepository?: RecommendationRepository;
+  generatedRecipeRepository?: GeneratedRecipeRepository;
+  recipeGenerationAdapter?: RecipeGenerationAdapter;
+  authRepository?: AuthRepository;
+  savedRecipeRepository?: SavedRecipeRepository;
+  cookingSessionRepository?: CookingSessionRepository;
 }
 
 export function createApp(dependencies: AppDependencies = {}) {
@@ -40,11 +83,58 @@ export function createApp(dependencies: AppDependencies = {}) {
   const allowedOrigins = env.CORS_ORIGINS.split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
+  const supabaseClient =
+    env.DATABASE_DRIVER === "supabase"
+      ? createSupabaseServerClient()
+      : undefined;
 
   const categoryRepository =
-    dependencies.categoryRepository ?? new PostgresCategoryRepository(pool);
+    dependencies.categoryRepository ??
+    (supabaseClient === undefined
+      ? new PostgresCategoryRepository(pool)
+      : new SupabaseCategoryRepository(supabaseClient));
   const recipeRepository =
-    dependencies.recipeRepository ?? new PostgresRecipeRepository(pool);
+    dependencies.recipeRepository ??
+    (supabaseClient === undefined
+      ? new PostgresRecipeRepository(pool)
+      : new SupabaseRecipeRepository(supabaseClient));
+  const recommendationRepository =
+    dependencies.recommendationRepository ??
+    (supabaseClient === undefined
+      ? new PostgresRecommendationRepository(pool)
+      : new SupabaseRecommendationRepository(supabaseClient));
+  const authRepository =
+    dependencies.authRepository ?? new PostgresAuthRepository(pool);
+  const savedRecipeRepository =
+    dependencies.savedRecipeRepository ??
+    new PostgresSavedRecipeRepository(pool);
+  const cookingSessionRepository =
+    dependencies.cookingSessionRepository ??
+    new PostgresCookingSessionRepository(pool);
+  const recipeGenerationAdapter =
+    dependencies.recipeGenerationAdapter ??
+    createRecipeGenerationAdapter(
+      env.NODE_ENV,
+      env.GEMINI_API_KEY,
+      env.GEMINI_MODEL,
+    );
+  const generatedRecipeRepository =
+    dependencies.generatedRecipeRepository ??
+    (env.NODE_ENV === "test"
+      ? undefined
+      : new PostgresGeneratedRecipeRepository(pool));
+  const authService = new AuthService(authRepository, {
+    accessSecret: env.JWT_ACCESS_SECRET,
+    refreshSecret: env.JWT_REFRESH_SECRET,
+    accessTokenTtlSeconds: env.JWT_ACCESS_TOKEN_TTL_SECONDS,
+    refreshTokenTtlSeconds: env.JWT_REFRESH_TOKEN_TTL_SECONDS,
+    ...(env.GOOGLE_OAUTH_CLIENT_ID === undefined
+      ? {}
+      : { googleOAuthClientId: env.GOOGLE_OAUTH_CLIENT_ID }),
+  });
+  const cookingSessionService = new CookingSessionService(
+    cookingSessionRepository,
+  );
 
   app.disable("x-powered-by");
   app.use(helmet());
@@ -76,6 +166,8 @@ export function createApp(dependencies: AppDependencies = {}) {
   );
 
   app.use("/", indexRouter);
+  app.use("/api/v1/auth", createAuthRouter(authService));
+  app.use("/api/v1/me", createMeRouter(authService));
 
   if (env.NODE_ENV !== "test") {
     const openApiPath = path.resolve("docs/openapi.yaml");
@@ -98,6 +190,34 @@ export function createApp(dependencies: AppDependencies = {}) {
     "/api/v1/recipes",
     createRecipeRouter(new RecipeService(recipeRepository)),
   );
+  app.use(
+    "/api/v1/recommendations",
+    createRecommendationRouter(
+      new RecommendationService(
+        recommendationRepository,
+        env.RECOMMENDATION_MATCH_THRESHOLD,
+        savedRecipeRepository,
+        recipeGenerationAdapter,
+        generatedRecipeRepository,
+      ),
+      authService,
+    ),
+  );
+  app.use(
+    "/api/v1/cooking-sessions",
+    createCookingSessionRouter(authService, cookingSessionService),
+  );
+  app.use(
+    "/api/v1/me/saved-recipes",
+    createSavedRecipeRouter(
+      authService,
+      new SavedRecipeService(savedRecipeRepository),
+    ),
+  );
+  app.use(
+    "/api/v1/me/cooking-history",
+    createCookingHistoryRouter(authService, cookingSessionService),
+  );
 
   app.use(notFoundHandler);
   app.use(errorHandler);
@@ -107,4 +227,19 @@ export function createApp(dependencies: AppDependencies = {}) {
 
 function isJsonObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function createRecipeGenerationAdapter(
+  nodeEnv: "development" | "test" | "production",
+  apiKey: string | undefined,
+  model: string | undefined,
+) {
+  if (nodeEnv === "test" || apiKey === undefined || model === undefined) {
+    return undefined;
+  }
+
+  return new GeminiRecipeGenerationAdapter({
+    apiKey,
+    model,
+  });
 }

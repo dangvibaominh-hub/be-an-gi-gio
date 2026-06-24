@@ -1,0 +1,258 @@
+import { randomUUID } from "node:crypto";
+
+import {
+  normalizeIngredientName,
+  tokenizeIngredientName,
+} from "./ingredient-normalizer.js";
+import type {
+  GeneratedRecipeRepository,
+  RecommendationCandidate,
+  RecommendationCandidateIngredient,
+  RecommendationRepository,
+} from "./recommendation.repository.js";
+import type { SavedRecipeRepository } from "../saved-recipes/saved-recipe.repository.js";
+import type { RecipeGenerationAdapter } from "./gemini-recipe.adapter.js";
+import type {
+  PaginatedRecommendations,
+  RecommendationQuery,
+  RecipeRecommendationModel,
+} from "./recommendation.types.js";
+
+interface NormalizedInput {
+  original: string;
+  normalized: string;
+  tokens: string[];
+}
+
+export class RecommendationService {
+  constructor(
+    private readonly repository: RecommendationRepository,
+    private readonly matchThreshold: number,
+    private readonly savedRecipeRepository?: SavedRecipeRepository,
+    private readonly recipeGenerationAdapter?: RecipeGenerationAdapter,
+    private readonly generatedRecipeRepository?: GeneratedRecipeRepository,
+  ) {}
+
+  async recommend(
+    query: RecommendationQuery,
+    userId?: string,
+  ): Promise<PaginatedRecommendations> {
+    const inputs = query.ingredients.map((ingredient) => ({
+      original: ingredient,
+      normalized: normalizeIngredientName(ingredient),
+      tokens: tokenizeIngredientName(ingredient),
+    }));
+    const savedRecipeSlugs =
+      userId === undefined || this.savedRecipeRepository === undefined
+        ? new Set<string>()
+        : new Set(
+            (await this.savedRecipeRepository.list(userId)).map(
+              (recipe) => recipe.slug,
+            ),
+          );
+
+    const candidates = await this.repository.listCandidates(query.filters);
+    const scoredCandidates = candidates
+      .map((candidate) =>
+        scoreCandidate(candidate, inputs, savedRecipeSlugs.has(candidate.slug)),
+      )
+      .filter((candidate) => candidate.match.score >= this.matchThreshold)
+      .sort(compareRecommendations);
+
+    const total = scoredCandidates.length;
+
+    if (total > 0) {
+      const offset = (query.page - 1) * query.limit;
+      const items = scoredCandidates.slice(offset, offset + query.limit);
+
+      return {
+        items,
+        page: query.page,
+        limit: query.limit,
+        total,
+        totalPages: Math.ceil(total / query.limit),
+        source: "database",
+      };
+    }
+
+    const generatedCandidate = await this.createGeneratedFallback(
+      query,
+      inputs,
+      userId,
+    );
+
+    if (generatedCandidate === null) {
+      return emptyRecommendations(query);
+    }
+
+    const generatedRecommendation = scoreCandidate(
+      generatedCandidate,
+      inputs,
+      false,
+    );
+
+    return {
+      items: query.page === 1 ? [generatedRecommendation] : [],
+      page: query.page,
+      limit: query.limit,
+      total: 1,
+      totalPages: 1,
+      source: "gemini",
+    };
+  }
+
+  private async createGeneratedFallback(
+    query: RecommendationQuery,
+    inputs: NormalizedInput[],
+    userId: string | undefined,
+  ) {
+    if (
+      this.recipeGenerationAdapter === undefined ||
+      this.generatedRecipeRepository === undefined
+    ) {
+      return null;
+    }
+
+    try {
+      const recipe = await this.recipeGenerationAdapter.generateRecipe({
+        ingredients: inputs.map((input) => input.original),
+        filters: query.filters,
+      });
+
+      if (recipe === null) {
+        return null;
+      }
+
+      return await this.generatedRecipeRepository.save({
+        recipe,
+        slug: createGeneratedRecipeSlug(recipe.title),
+        aiModel: this.recipeGenerationAdapter.model,
+        ...(userId === undefined ? {} : { createdBy: userId }),
+      });
+    } catch {
+      return null;
+    }
+  }
+}
+
+function scoreCandidate(
+  candidate: RecommendationCandidate,
+  inputs: NormalizedInput[],
+  isSavedRecipe: boolean,
+): RecipeRecommendationModel {
+  const matchedInputIndexes = new Set<number>();
+  const matchedIngredientIds = new Set<string>();
+
+  for (const [inputIndex, input] of inputs.entries()) {
+    for (const ingredient of candidate.ingredients) {
+      if (!ingredientMatchesInput(ingredient, input)) {
+        continue;
+      }
+
+      matchedInputIndexes.add(inputIndex);
+      matchedIngredientIds.add(ingredient.id);
+    }
+  }
+
+  const inputCoverage = matchedInputIndexes.size / inputs.length;
+  const recipeCoverage =
+    candidate.ingredients.length === 0
+      ? 0
+      : matchedIngredientIds.size / candidate.ingredients.length;
+  const score = roundScore(
+    Math.min(1, inputCoverage * 0.7 + recipeCoverage * 0.3 + (isSavedRecipe ? 0.05 : 0)),
+  );
+
+  return {
+    id: candidate.id,
+    slug: candidate.slug,
+    title: candidate.title,
+    description: candidate.description,
+    image: candidate.image,
+    imageAlt: candidate.imageAlt,
+    difficulty: candidate.difficulty,
+    cookTimeMinutes: candidate.cookTimeMinutes,
+    baseServings: candidate.baseServings,
+    category: candidate.category,
+    match: {
+      score,
+      matchedIngredients: inputs
+        .filter((_input, index) => matchedInputIndexes.has(index))
+        .map((input) => input.original),
+      missingIngredients: candidate.ingredients
+        .filter((ingredient) => !matchedIngredientIds.has(ingredient.id))
+        .map((ingredient) => ingredient.name),
+    },
+  };
+}
+
+function ingredientMatchesInput(
+  ingredient: RecommendationCandidateIngredient,
+  input: NormalizedInput,
+) {
+  return [ingredient.normalizedName, ...ingredient.aliases].some((candidate) =>
+    normalizedValuesMatch(candidate, input),
+  );
+}
+
+function normalizedValuesMatch(value: string, input: NormalizedInput) {
+  const normalizedValue = normalizeIngredientName(value);
+
+  if (normalizedValue === input.normalized) {
+    return true;
+  }
+
+  const valueTokens = tokenizeIngredientName(normalizedValue);
+
+  return (
+    isTokenSubset(input.tokens, valueTokens) ||
+    isTokenSubset(valueTokens, input.tokens)
+  );
+}
+
+function isTokenSubset(left: string[], right: string[]) {
+  if (left.length === 0 || right.length === 0) {
+    return false;
+  }
+
+  const rightTokens = new Set(right);
+  return left.every((token) => rightTokens.has(token));
+}
+
+function roundScore(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function compareRecommendations(
+  left: RecipeRecommendationModel,
+  right: RecipeRecommendationModel,
+) {
+  return (
+    right.match.score - left.match.score ||
+    left.match.missingIngredients.length - right.match.missingIngredients.length ||
+    left.cookTimeMinutes - right.cookTimeMinutes ||
+    left.title.localeCompare(right.title, "vi")
+  );
+}
+
+function emptyRecommendations(query: RecommendationQuery): PaginatedRecommendations {
+  return {
+    items: [],
+    page: query.page,
+    limit: query.limit,
+    total: 0,
+    totalPages: 0,
+    source: "empty",
+  };
+}
+
+function createGeneratedRecipeSlug(title: string) {
+  const normalizedTitle = normalizeIngredientName(title)
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const suffix = randomUUID().slice(0, 8);
+  const maxBaseLength = 180 - "gemini--".length - suffix.length;
+  const base = (normalizedTitle || "cong-thuc").slice(0, maxBaseLength);
+
+  return `gemini-${base}-${suffix}`;
+}

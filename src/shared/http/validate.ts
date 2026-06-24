@@ -16,3 +16,11 @@ export function validateParams(schema: ZodType): RequestHandler {
     next();
   };
 }
+
+export function validateBody(schema: ZodType): RequestHandler {
+  return (request, response, next) => {
+    const validatedBody = schema.parse(request.body) as unknown;
+    response.locals.validatedBody = validatedBody;
+    next();
+  };
+}

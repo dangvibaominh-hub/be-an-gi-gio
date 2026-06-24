@@ -34,6 +34,204 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Category"
+  /api/v1/auth/register:
+    post:
+      tags: [Auth]
+      summary: Đăng ký tài khoản bằng email và mật khẩu
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Đăng ký thành công
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSessionResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Đăng nhập bằng email và mật khẩu
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Đăng nhập thành công
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSessionResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Error"
+  /api/v1/auth/google:
+    post:
+      tags: [Auth]
+      summary: Đăng nhập bằng Google ID token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoogleLoginRequest"
+      responses:
+        "200":
+          description: Đăng nhập Google thành công
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSessionResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "501":
+          $ref: "#/components/responses/Error"
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenRequest"
+      responses:
+        "200":
+          description: Token mới
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSessionResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Error"
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Thu hồi refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenRequest"
+      responses:
+        "204":
+          description: Đăng xuất thành công
+        "400":
+          $ref: "#/components/responses/ValidationError"
+  /api/v1/me:
+    get:
+      tags: [Me]
+      security:
+        - bearerAuth: []
+      summary: Lấy hồ sơ người dùng hiện tại
+      responses:
+        "200":
+          description: Hồ sơ người dùng
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+    patch:
+      tags: [Me]
+      security:
+        - bearerAuth: []
+      summary: Cập nhật hồ sơ người dùng hiện tại
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileRequest"
+      responses:
+        "200":
+          description: Hồ sơ sau cập nhật
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Error"
+  /api/v1/me/saved-recipes:
+    get:
+      tags: [SavedRecipes]
+      security:
+        - bearerAuth: []
+      summary: Lấy danh sách công thức đã lưu
+      responses:
+        "200":
+          description: Danh sách công thức đã lưu
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    type: boolean
+                    const: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SavedRecipe"
+        "401":
+          $ref: "#/components/responses/Error"
+  /api/v1/me/saved-recipes/{slug}:
+    post:
+      tags: [SavedRecipes]
+      security:
+        - bearerAuth: []
+      summary: Lưu công thức
+      parameters:
+        - $ref: "#/components/parameters/RecipeSlug"
+      responses:
+        "201":
+          description: Công thức đã lưu
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    type: boolean
+                    const: true
+                  data:
+                    $ref: "#/components/schemas/SavedRecipe"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [SavedRecipes]
+      security:
+        - bearerAuth: []
+      summary: Bỏ lưu công thức
+      parameters:
+        - $ref: "#/components/parameters/RecipeSlug"
+      responses:
+        "204":
+          description: Đã bỏ lưu
+        "401":
+          $ref: "#/components/responses/Error"
   /api/v1/recipes:
     get:
       tags: [Recipes]
@@ -98,6 +296,159 @@ paths:
                     $ref: "#/components/schemas/PaginationMeta"
         "400":
           $ref: "#/components/responses/ValidationError"
+  /api/v1/recommendations:
+    post:
+      tags: [Recommendations]
+      security:
+        - {}
+        - bearerAuth: []
+      summary: Gợi ý công thức theo danh sách nguyên liệu
+      description: >
+        Giai đoạn 2 ưu tiên matching trong database. Nếu không có recipe đạt
+        ngưỡng RECOMMENDATION_MATCH_THRESHOLD, backend có thể gọi Gemini để tạo
+        công thức mới, validate schema và lưu recipe với moderation_status PENDING.
+        Recipe PENDING chỉ trả về cho request hiện tại, chưa xuất hiện trong
+        catalog công khai.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecommendationRequest"
+      responses:
+        "200":
+          description: Danh sách công thức phù hợp với nguyên liệu
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data, meta]
+                properties:
+                  success:
+                    type: boolean
+                    const: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RecipeRecommendation"
+                  meta:
+                    $ref: "#/components/schemas/RecommendationMeta"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+  /api/v1/cooking-sessions:
+    post:
+      tags: [CookingSessions]
+      security:
+        - bearerAuth: []
+      summary: Bat dau hoac tiep tuc phien nau
+      description: >
+        Neu user da co phien IN_PROGRESS cho cong thuc nay, API tra ve phien
+        dang nau hien tai thay vi tao ban ghi trung.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartCookingSessionRequest"
+      responses:
+        "201":
+          description: Phien nau da duoc tao hoac tim thay
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CookingSessionResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/cooking-sessions/{id}:
+    patch:
+      tags: [CookingSessions]
+      security:
+        - bearerAuth: []
+      summary: Cap nhat tien do phien nau
+      parameters:
+        - $ref: "#/components/parameters/CookingSessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCookingSessionRequest"
+      responses:
+        "200":
+          description: Phien nau sau khi cap nhat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CookingSessionResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/cooking-sessions/{id}/complete:
+    post:
+      tags: [CookingSessions]
+      security:
+        - bearerAuth: []
+      summary: Hoan thanh phien nau
+      description: Hanh dong idempotent; goi lai voi phien da hoan thanh se tra ve ket qua hien co.
+      parameters:
+        - $ref: "#/components/parameters/CookingSessionId"
+      responses:
+        "200":
+          description: Phien nau da hoan thanh
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CookingSessionResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/me/cooking-history:
+    get:
+      tags: [CookingSessions]
+      security:
+        - bearerAuth: []
+      summary: Lay lich su nau cua user hien tai
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [completed-at-desc, started-at-desc]
+            default: completed-at-desc
+      responses:
+        "200":
+          description: Danh sach phien nau da hoan thanh
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data, meta]
+                properties:
+                  success:
+                    type: boolean
+                    const: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CookingSession"
+                  meta:
+                    $ref: "#/components/schemas/PaginationMeta"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Error"
   /api/v1/recipes/{slug}:
     get:
       tags: [Recipes]
@@ -130,6 +481,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   parameters:
     Page:
       name: page
@@ -146,6 +502,20 @@ components:
         minimum: 1
         maximum: 100
         default: 12
+    RecipeSlug:
+      name: slug
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    CookingSessionId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
   responses:
     ValidationError:
       description: Query hoặc path parameter không hợp lệ
@@ -153,7 +523,120 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+    Error:
+      description: Lỗi nghiệp vụ hoặc phân quyền
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
   schemas:
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 120
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+    GoogleLoginRequest:
+      type: object
+      required: [idToken]
+      properties:
+        idToken:
+          type: string
+    RefreshTokenRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+    UpdateProfileRequest:
+      type: object
+      required: [displayName]
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 120
+    User:
+      type: object
+      required: [id, email, displayName, avatarUrl, role, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+        avatarUrl:
+          type: [string, "null"]
+        role:
+          type: string
+          enum: [USER, ADMIN]
+        status:
+          type: string
+          enum: [ACTIVE, SUSPENDED]
+    TokenPair:
+      type: object
+      required: [accessToken, refreshToken, tokenType, expiresIn]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        tokenType:
+          type: string
+          const: Bearer
+        expiresIn:
+          type: integer
+    AuthSession:
+      type: object
+      required: [user, tokens]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        tokens:
+          $ref: "#/components/schemas/TokenPair"
+    AuthSessionResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/AuthSession"
+    UserResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/User"
     Category:
       type: object
       required: [id, slug, name]
@@ -210,6 +693,15 @@ components:
           type: integer
         category:
           type: string
+    SavedRecipe:
+      allOf:
+        - $ref: "#/components/schemas/RecipeSummary"
+        - type: object
+          required: [savedAt]
+          properties:
+            savedAt:
+              type: string
+              format: date-time
     RecipeIngredient:
       type: object
       required: [id, name, baseAmount, unit, prepNote, haveIt]
@@ -270,6 +762,156 @@ components:
               type: object
               additionalProperties:
                 type: string
+    RecommendationRequest:
+      type: object
+      required: [ingredients]
+      properties:
+        ingredients:
+          type: array
+          minItems: 1
+          maxItems: 30
+          items:
+            type: string
+            minLength: 1
+            maxLength: 80
+        filters:
+          $ref: "#/components/schemas/RecommendationFilters"
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 12
+    RecommendationFilters:
+      type: object
+      properties:
+        category:
+          type: string
+          description: Slug hoặc tên danh mục
+        difficulties:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items:
+            $ref: "#/components/schemas/RecipeDifficulty"
+        maxCookTimeMinutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+        servings:
+          type: integer
+          minimum: 1
+          maximum: 100
+    RecipeRecommendation:
+      allOf:
+        - $ref: "#/components/schemas/RecipeSummary"
+        - type: object
+          required: [match]
+          properties:
+            match:
+              $ref: "#/components/schemas/RecommendationMatch"
+    RecommendationMatch:
+      type: object
+      required: [score, matchedIngredients, missingIngredients]
+      properties:
+        score:
+          type: number
+          minimum: 0
+          maximum: 1
+        matchedIngredients:
+          type: array
+          items:
+            type: string
+        missingIngredients:
+          type: array
+          items:
+            type: string
+    RecommendationMeta:
+      allOf:
+        - $ref: "#/components/schemas/PaginationMeta"
+        - type: object
+          required: [source]
+          properties:
+            source:
+              $ref: "#/components/schemas/RecommendationSource"
+    RecommendationSource:
+      type: string
+      enum: [database, gemini, empty]
+    StartCookingSessionRequest:
+      type: object
+      required: [recipeSlug]
+      properties:
+        recipeSlug:
+          type: string
+          pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        servings:
+          type: integer
+          minimum: 1
+          maximum: 100
+    UpdateCookingSessionRequest:
+      type: object
+      minProperties: 1
+      properties:
+        currentStep:
+          type: integer
+          minimum: 1
+        servings:
+          type: integer
+          minimum: 1
+          maximum: 100
+    CookingSessionStatus:
+      type: string
+      enum: [IN_PROGRESS, COMPLETED]
+    CookingSession:
+      type: object
+      required:
+        - id
+        - recipe
+        - currentStep
+        - totalSteps
+        - servings
+        - status
+        - startedAt
+        - completedAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        recipe:
+          $ref: "#/components/schemas/RecipeSummary"
+        currentStep:
+          type: integer
+          minimum: 1
+        totalSteps:
+          type: integer
+          minimum: 0
+        servings:
+          type: integer
+          minimum: 1
+        status:
+          $ref: "#/components/schemas/CookingSessionStatus"
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: [string, "null"]
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CookingSessionResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/CookingSession"
     PaginationMeta:
       type: object
       required: [page, limit, total, totalPages]

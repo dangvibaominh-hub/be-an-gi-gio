@@ -9,7 +9,7 @@ sau đó nâng cấp sang TypeScript strict. Entry point giữ cấu trúc gener
 
 ## Yêu cầu
 
-- Node.js 20+
+- Node.js 22+
 - PostgreSQL 15+ hoặc một Supabase project
 
 ## Khởi động
@@ -21,6 +21,19 @@ npm run db:migrate
 npm run db:seed
 npm run dev
 ```
+
+### Supabase database
+
+Backend co 2 che do ket noi:
+
+- `DATABASE_DRIVER=supabase`: runtime API doc du lieu qua Supabase SDK bang
+  `SUPABASE_URL` va `SUPABASE_PUBLISHABLE_KEY`.
+- `DATABASE_DRIVER=postgres`: runtime API dung truc tiep PostgreSQL qua `pg`.
+  Che do nay, cung nhu `npm run db:migrate` va `npm run db:seed`, can
+  `DATABASE_URL` co database password cua Supabase va `DATABASE_SSL=true`.
+
+Project da load ca `.env` va `.env.local`; `.env.local` phu hop de giu cau
+hinh Supabase tren may local.
 
 API mặc định chạy tại `http://localhost:4000`. Swagger UI có tại
 `http://localhost:4000/api-docs`.

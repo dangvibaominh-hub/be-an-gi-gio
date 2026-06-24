@@ -16,6 +16,22 @@ function normalizeIngredient(value: string) {
     .trim();
 }
 
+function getIngredientAliases(value: string) {
+  const aliases: Record<string, string[]> = {
+    "bot banh xeo": ["banh xeo"],
+    "ca loc": ["ca"],
+    "ca nguyen con": ["ca"],
+    "dau hu": ["dau phu"],
+    "gia vi co ban": ["nuoc mam", "duong", "tieu", "dau an"],
+    "hai san": ["tom", "muc"],
+    "nam va dau hu": ["nam", "dau hu", "dau phu"],
+    "thit bo va bong cai": ["thit bo", "bong cai"],
+    "xuong ong va thit bo": ["xuong ong", "thit bo"],
+  };
+
+  return aliases[normalizeIngredient(value)] ?? [];
+}
+
 function getPrimaryTerm(techniqueIcon: string) {
   if (techniqueIcon === "chao") return "áp chảo";
   if (techniqueIcon === "hap") return "hấp cách thủy";
@@ -146,13 +162,18 @@ async function seedRecipe(
 
   for (const [index, ingredient] of createIngredients(recipe).entries()) {
     const ingredientResult = await client.query<{ id: string }>(
-      `INSERT INTO ingredients (name, normalized_name)
-       VALUES ($1, $2)
+      `INSERT INTO ingredients (name, normalized_name, aliases)
+       VALUES ($1, $2, $3)
        ON CONFLICT (normalized_name) DO UPDATE SET
          name = EXCLUDED.name,
+         aliases = EXCLUDED.aliases,
          updated_at = NOW()
        RETURNING id`,
-      [ingredient.name, normalizeIngredient(ingredient.name)],
+      [
+        ingredient.name,
+        normalizeIngredient(ingredient.name),
+        getIngredientAliases(ingredient.name),
+      ],
     );
     const ingredientId = ingredientResult.rows[0]?.id;
 

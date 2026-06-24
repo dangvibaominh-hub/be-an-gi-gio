@@ -8,6 +8,8 @@ erDiagram
   recipes ||--o{ recipe_steps : has
   recipe_steps ||--o{ recipe_step_terms : mentions
   cooking_terms ||--o{ recipe_step_terms : explains
+  app_users ||--o{ cooking_sessions : starts
+  recipes ||--o{ cooking_sessions : cooked_as
 
   categories {
     uuid id PK
@@ -62,5 +64,24 @@ erDiagram
     uuid id PK
     varchar term UK
     text definition
+  }
+
+  app_users {
+    uuid id PK
+    varchar email
+    varchar normalized_email UK
+    user_role role
+    user_status status
+  }
+
+  cooking_sessions {
+    uuid id PK
+    uuid user_id FK
+    uuid recipe_id FK
+    integer current_step
+    integer servings
+    timestamptz started_at
+    timestamptz completed_at
+    cooking_session_status status
   }
 ```
