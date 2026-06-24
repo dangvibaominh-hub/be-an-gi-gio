@@ -232,11 +232,21 @@ export class AuthService {
   }
 
   private async verifyGoogleToken(idToken: string) {
-    const response = await fetch(
-      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(
-        idToken,
-      )}`,
-    );
+    let response: Response;
+
+    try {
+      response = await fetch(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(
+          idToken,
+        )}`,
+      );
+    } catch {
+      throw new AppError(
+        503,
+        "GOOGLE_OAUTH_UNAVAILABLE",
+        "Unable to verify Google token right now. Please try again later.",
+      );
+    }
 
     if (!response.ok) {
       throw new AppError(
@@ -246,14 +256,19 @@ export class AuthService {
       );
     }
 
-    const tokenInfo = (await response.json()) as GoogleTokenInfo;
+    let tokenInfo: GoogleTokenInfo;
+
+    try {
+      tokenInfo = (await response.json()) as GoogleTokenInfo;
+    } catch {
+      throw invalidGoogleTokenError();
+    }
 
     if (
       tokenInfo.aud !== this.options.googleOAuthClientId ||
       tokenInfo.sub === undefined ||
       tokenInfo.email === undefined ||
-      tokenInfo.email_verified === false ||
-      tokenInfo.email_verified === "false"
+      !isGoogleEmailVerified(tokenInfo.email_verified)
     ) {
       throw new AppError(
         401,
@@ -269,6 +284,18 @@ export class AuthService {
       picture: tokenInfo.picture,
     };
   }
+}
+
+function isGoogleEmailVerified(value: GoogleTokenInfo["email_verified"]) {
+  return value === true || value === "true";
+}
+
+function invalidGoogleTokenError() {
+  return new AppError(
+    401,
+    "INVALID_GOOGLE_TOKEN",
+    "Google token khÃ´ng há»£p lá»‡.",
+  );
 }
 
 export function normalizeEmail(email: string) {
