@@ -36,7 +36,8 @@ Project da load ca `.env` va `.env.local`; `.env.local` phu hop de giu cau
 hinh Supabase tren may local.
 
 API mặc định chạy tại `http://localhost:4000`. Swagger UI có tại
-`http://localhost:4000/api-docs`.
+`http://localhost:4000/docs` (`/api-docs` vẫn được giữ để tương thích ngược).
+Production docs: `https://api-production-afd7.up.railway.app/docs`.
 
 ## Scripts
 

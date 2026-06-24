@@ -169,18 +169,29 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.use("/api/v1/auth", createAuthRouter(authService));
   app.use("/api/v1/me", createMeRouter(authService));
 
-  if (env.NODE_ENV !== "test") {
-    const openApiPath = path.resolve("docs/openapi.yaml");
-    const openApiDocument = YAML.parse(
-      readFileSync(openApiPath, "utf8"),
-    ) as unknown;
+  const openApiDocument = loadOpenApiDocument();
+  const swaggerHandler = swaggerUi.setup(openApiDocument, {
+    customSiteTitle: "An Gi Gio API Docs",
+    swaggerOptions: {
+      persistAuthorization: true,
+      tryItOutEnabled: true,
+    },
+  });
+  const swaggerContentSecurityPolicy = helmet.contentSecurityPolicy({
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      "img-src": ["'self'", "data:", "https://validator.swagger.io"],
+      "script-src": ["'self'", "'unsafe-inline'"],
+      "style-src": ["'self'", "'unsafe-inline'"],
+    },
+  });
 
-    if (!isJsonObject(openApiDocument)) {
-      throw new Error("OpenAPI document must be a JSON object.");
-    }
-
-    app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(openApiDocument));
-  }
+  app.use(
+    ["/docs", "/api-docs"],
+    swaggerContentSecurityPolicy,
+    swaggerUi.serve,
+    swaggerHandler,
+  );
 
   app.use(
     "/api/v1/categories",
@@ -227,6 +238,19 @@ export function createApp(dependencies: AppDependencies = {}) {
 
 function isJsonObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function loadOpenApiDocument(): JsonObject {
+  const openApiPath = path.resolve("docs/openapi.yaml");
+  const openApiDocument = YAML.parse(
+    readFileSync(openApiPath, "utf8"),
+  ) as unknown;
+
+  if (!isJsonObject(openApiDocument)) {
+    throw new Error("OpenAPI document must be a JSON object.");
+  }
+
+  return openApiDocument;
 }
 
 function createRecipeGenerationAdapter(

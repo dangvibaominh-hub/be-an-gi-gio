@@ -4,6 +4,8 @@ info:
   version: 0.1.0
   description: REST contract cho Recipe Catalog — Giai đoạn 1.
 servers:
+  - url: https://api-production-afd7.up.railway.app
+    description: Railway production
   - url: http://localhost:4000
     description: Local development
 paths:
