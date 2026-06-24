@@ -69,6 +69,12 @@ import {
 } from "./modules/saved-recipes/saved-recipe.repository.js";
 import { createSavedRecipeRouter } from "./modules/saved-recipes/saved-recipe.routes.js";
 import { SavedRecipeService } from "./modules/saved-recipes/saved-recipe.service.js";
+import {
+  PostgresAdminRepository,
+  type AdminRepository,
+} from "./modules/admin/admin.repository.js";
+import { createAdminRouter } from "./modules/admin/admin.routes.js";
+import { AdminService } from "./modules/admin/admin.service.js";
 import { indexRouter } from "./routes/index.routes.js";
 import {
   errorHandler,
@@ -85,6 +91,7 @@ export interface AppDependencies {
   savedRecipeRepository?: SavedRecipeRepository;
   cookingSessionRepository?: CookingSessionRepository;
   feedbackRepository?: FeedbackRepository;
+  adminRepository?: AdminRepository;
 }
 
 export function createApp(dependencies: AppDependencies = {}) {
@@ -123,6 +130,8 @@ export function createApp(dependencies: AppDependencies = {}) {
     new PostgresCookingSessionRepository(pool);
   const feedbackRepository =
     dependencies.feedbackRepository ?? new PostgresFeedbackRepository(pool);
+  const adminRepository =
+    dependencies.adminRepository ?? new PostgresAdminRepository(pool);
   const recipeGenerationAdapter =
     dependencies.recipeGenerationAdapter ??
     createRecipeGenerationAdapter(
@@ -250,6 +259,10 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.use(
     "/api/v1/me/personalization",
     createPersonalizationRouter(authService, feedbackService),
+  );
+  app.use(
+    "/api/v1/admin",
+    createAdminRouter(authService, new AdminService(adminRepository)),
   );
 
   app.use(notFoundHandler);
