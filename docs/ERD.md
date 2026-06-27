@@ -14,6 +14,7 @@ erDiagram
   recipes ||--o{ cooking_feedback : rated_by
   app_users ||--o{ cooking_feedback : submits
   app_users ||--o| user_personalization_insights : learns
+  app_users ||--o{ admin_audit_logs : performs
 
   categories {
     uuid id PK
@@ -108,5 +109,15 @@ erDiagram
     numeric quick_recipe_boost
     numeric ingredient_match_boost
     numeric technique_guidance_boost
+  }
+
+  admin_audit_logs {
+    uuid id PK
+    uuid actor_user_id FK
+    varchar action
+    varchar entity_type
+    uuid entity_id
+    jsonb details
+    timestamptz created_at
   }
 ```

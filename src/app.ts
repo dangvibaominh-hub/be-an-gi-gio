@@ -14,6 +14,11 @@ import { logger } from "./config/logger.js";
 import { pool } from "./database/pool.js";
 import { createSupabaseServerClient } from "./database/supabase.js";
 import {
+  PostgresAdminRepository,
+  type AdminRepository,
+} from "./modules/admin/admin.repository.js";
+import { createAdminRouter } from "./modules/admin/admin.routes.js";
+import {
   PostgresAuthRepository,
   type AuthRepository,
 } from "./modules/auth/auth.repository.js";
@@ -82,6 +87,7 @@ export interface AppDependencies {
   generatedRecipeRepository?: GeneratedRecipeRepository;
   recipeGenerationAdapter?: RecipeGenerationAdapter;
   authRepository?: AuthRepository;
+  adminRepository?: AdminRepository;
   savedRecipeRepository?: SavedRecipeRepository;
   cookingSessionRepository?: CookingSessionRepository;
   feedbackRepository?: FeedbackRepository;
@@ -115,6 +121,8 @@ export function createApp(dependencies: AppDependencies = {}) {
       : new SupabaseRecommendationRepository(supabaseClient));
   const authRepository =
     dependencies.authRepository ?? new PostgresAuthRepository(pool);
+  const adminRepository =
+    dependencies.adminRepository ?? new PostgresAdminRepository(pool);
   const savedRecipeRepository =
     dependencies.savedRecipeRepository ??
     new PostgresSavedRecipeRepository(pool);
@@ -181,6 +189,7 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.use("/", indexRouter);
   app.use("/api/v1/auth", createAuthRouter(authService));
   app.use("/api/v1/me", createMeRouter(authService));
+  app.use("/api/v1/admin", createAdminRouter(authService, adminRepository));
 
   const openApiDocument = loadOpenApiDocument();
   const swaggerHandler = swaggerUi.setup(openApiDocument, {
