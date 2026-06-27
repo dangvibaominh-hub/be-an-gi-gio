@@ -529,6 +529,297 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/admin/recipes:
+    get:
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      summary: Admin xem danh sách toàn bộ công thức
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/RecipeStatus"
+        - name: source
+          in: query
+          schema:
+            $ref: "#/components/schemas/RecipeSource"
+        - name: moderationStatus
+          in: query
+          schema:
+            $ref: "#/components/schemas/ModerationStatus"
+      responses:
+        "200":
+          description: Danh sách công thức admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRecipeListResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+    post:
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      summary: Admin tạo công thức thủ công
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminRecipeWriteRequest"
+      responses:
+        "201":
+          description: Tạo công thức thành công
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRecipeDetailResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/admin/recipes/{id}:
+    get:
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      summary: Admin xem chi tiết công thức theo id
+      parameters:
+        - $ref: "#/components/parameters/UuidId"
+      responses:
+        "200":
+          description: Chi tiết công thức admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRecipeDetailResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    patch:
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      summary: Admin cập nhật công thức
+      parameters:
+        - $ref: "#/components/parameters/UuidId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminRecipePatchRequest"
+      responses:
+        "200":
+          description: Cập nhật công thức thành công
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRecipeDetailResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      summary: Admin soft-delete công thức bằng cách chuyển status sang HIDDEN
+      parameters:
+        - $ref: "#/components/parameters/UuidId"
+      responses:
+        "204":
+          description: Công thức đã được ẩn
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/admin/recipes/{id}/moderation:
+    patch:
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      summary: Admin duyệt hoặc từ chối công thức do Gemini tạo
+      parameters:
+        - $ref: "#/components/parameters/UuidId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminModerateRecipeRequest"
+      responses:
+        "200":
+          description: Cập nhật trạng thái kiểm duyệt thành công
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRecipeDetailResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/admin/recipes/{id}/approve:
+    post:
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      summary: Admin duyệt công thức do Gemini tạo
+      parameters:
+        - $ref: "#/components/parameters/UuidId"
+      responses:
+        "200":
+          description: Công thức Gemini đã được duyệt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRecipeDetailResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/admin/recipes/{id}/reject:
+    post:
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      summary: Admin từ chối công thức do Gemini tạo
+      parameters:
+        - $ref: "#/components/parameters/UuidId"
+      responses:
+        "200":
+          description: Công thức Gemini đã bị từ chối và ẩn khỏi catalog
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRecipeDetailResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/admin/users:
+    get:
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      summary: Admin xem danh sách tài khoản
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [USER, ADMIN]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [ACTIVE, SUSPENDED]
+      responses:
+        "200":
+          description: Danh sách tài khoản
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserListResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+  /api/v1/admin/users/{id}/status:
+    patch:
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      summary: Admin cập nhật trạng thái tài khoản
+      parameters:
+        - $ref: "#/components/parameters/UuidId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminUpdateUserStatusRequest"
+      responses:
+        "200":
+          description: Cập nhật trạng thái tài khoản thành công
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/admin/audit-logs:
+    get:
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      summary: Admin xem audit log
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - name: actorUserId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: entityType
+          in: query
+          schema:
+            type: string
+            enum: [recipe, user]
+      responses:
+        "200":
+          description: Danh sách audit log
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAuditLogListResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
 components:
   securitySchemes:
     bearerAuth:
@@ -559,6 +850,13 @@ components:
         type: string
         pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
     CookingSessionId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    UuidId:
       name: id
       in: path
       required: true
@@ -1146,6 +1444,398 @@ components:
           const: true
         data:
           $ref: "#/components/schemas/PersonalizationInsight"
+    RecipeStatus:
+      type: string
+      enum: [DRAFT, PUBLISHED, HIDDEN]
+    RecipeSource:
+      type: string
+      enum: [ADMIN, SEED, GEMINI]
+    ModerationStatus:
+      type: string
+      enum: [PENDING, APPROVED, REJECTED]
+    AdminRecipeIngredientInput:
+      type: object
+      required: [name, amount, unit]
+      properties:
+        name:
+          type: string
+          maxLength: 150
+        amount:
+          type: number
+          exclusiveMinimum: 0
+        unit:
+          type: string
+          maxLength: 50
+        prepNote:
+          type: string
+          maxLength: 200
+          default: ""
+    AdminRecipeStepInput:
+      type: object
+      required: [content, estimatedMinutes, techniqueIcon]
+      properties:
+        content:
+          type: string
+          minLength: 10
+          maxLength: 600
+        estimatedMinutes:
+          type: integer
+          minimum: 0
+          maximum: 240
+        techniqueIcon:
+          type: string
+          enum: [dao, chao, noi, tron, hap]
+        isTricky:
+          type: boolean
+          default: false
+        timerSeconds:
+          type: [integer, "null"]
+          minimum: 1
+    AdminRecipeWriteRequest:
+      type: object
+      required:
+        - slug
+        - title
+        - description
+        - image
+        - imageAlt
+        - difficulty
+        - cookTimeMinutes
+        - baseServings
+        - categorySlug
+        - ingredients
+        - steps
+      properties:
+        slug:
+          type: string
+          pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          maxLength: 180
+        title:
+          type: string
+          minLength: 5
+          maxLength: 200
+        description:
+          type: string
+          minLength: 10
+          maxLength: 1000
+        image:
+          type: string
+          maxLength: 500
+        imageAlt:
+          type: string
+          minLength: 5
+          maxLength: 250
+        difficulty:
+          $ref: "#/components/schemas/RecipeDifficulty"
+        cookTimeMinutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+        baseServings:
+          type: integer
+          minimum: 1
+          maximum: 100
+        categorySlug:
+          type: string
+          pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        status:
+          $ref: "#/components/schemas/RecipeStatus"
+        ingredients:
+          type: array
+          minItems: 1
+          maxItems: 30
+          items:
+            $ref: "#/components/schemas/AdminRecipeIngredientInput"
+        steps:
+          type: array
+          minItems: 1
+          maxItems: 30
+          items:
+            $ref: "#/components/schemas/AdminRecipeStepInput"
+    AdminRecipePatchRequest:
+      type: object
+      description: Cùng field với AdminRecipeWriteRequest nhưng tất cả field đều optional.
+      properties:
+        slug:
+          type: string
+          pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          maxLength: 180
+        title:
+          type: string
+          minLength: 5
+          maxLength: 200
+        description:
+          type: string
+          minLength: 10
+          maxLength: 1000
+        image:
+          type: string
+          maxLength: 500
+        imageAlt:
+          type: string
+          minLength: 5
+          maxLength: 250
+        difficulty:
+          $ref: "#/components/schemas/RecipeDifficulty"
+        cookTimeMinutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+        baseServings:
+          type: integer
+          minimum: 1
+          maximum: 100
+        categorySlug:
+          type: string
+          pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        status:
+          $ref: "#/components/schemas/RecipeStatus"
+        ingredients:
+          type: array
+          minItems: 1
+          maxItems: 30
+          items:
+            $ref: "#/components/schemas/AdminRecipeIngredientInput"
+        steps:
+          type: array
+          minItems: 1
+          maxItems: 30
+          items:
+            $ref: "#/components/schemas/AdminRecipeStepInput"
+    AdminRecipeIngredient:
+      type: object
+      required: [id, name, amount, unit, prepNote, displayOrder]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        amount:
+          type: number
+        unit:
+          type: string
+        prepNote:
+          type: string
+        displayOrder:
+          type: integer
+    AdminRecipeStep:
+      type: object
+      required:
+        - id
+        - displayOrder
+        - content
+        - estimatedMinutes
+        - techniqueIcon
+        - isTricky
+        - timerSeconds
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayOrder:
+          type: integer
+        content:
+          type: string
+        estimatedMinutes:
+          type: integer
+        techniqueIcon:
+          type: string
+          enum: [dao, chao, noi, tron, hap]
+        isTricky:
+          type: boolean
+        timerSeconds:
+          type: [integer, "null"]
+    AdminRecipe:
+      type: object
+      required:
+        - id
+        - slug
+        - title
+        - description
+        - image
+        - imageAlt
+        - difficulty
+        - cookTimeMinutes
+        - baseServings
+        - category
+        - status
+        - source
+        - aiModel
+        - moderationStatus
+        - createdBy
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        image:
+          type: string
+        imageAlt:
+          type: string
+        difficulty:
+          $ref: "#/components/schemas/RecipeDifficulty"
+        cookTimeMinutes:
+          type: integer
+        baseServings:
+          type: integer
+        category:
+          $ref: "#/components/schemas/Category"
+        status:
+          $ref: "#/components/schemas/RecipeStatus"
+        source:
+          $ref: "#/components/schemas/RecipeSource"
+        aiModel:
+          type: [string, "null"]
+        moderationStatus:
+          $ref: "#/components/schemas/ModerationStatus"
+        createdBy:
+          oneOf:
+            - type: object
+              required: [id, email]
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                email:
+                  type: [string, "null"]
+            - type: "null"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AdminRecipeDetail:
+      allOf:
+        - $ref: "#/components/schemas/AdminRecipe"
+        - type: object
+          required: [ingredients, steps]
+          properties:
+            ingredients:
+              type: array
+              items:
+                $ref: "#/components/schemas/AdminRecipeIngredient"
+            steps:
+              type: array
+              items:
+                $ref: "#/components/schemas/AdminRecipeStep"
+    AdminRecipeListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminRecipe"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+    AdminRecipeDetailResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/AdminRecipeDetail"
+    AdminModerateRecipeRequest:
+      type: object
+      required: [moderationStatus]
+      properties:
+        moderationStatus:
+          type: string
+          enum: [APPROVED, REJECTED]
+    AdminUser:
+      allOf:
+        - $ref: "#/components/schemas/User"
+        - type: object
+          required: [provider, createdAt, updatedAt]
+          properties:
+            provider:
+              type: string
+              enum: [PASSWORD, GOOGLE]
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+    AdminUserListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminUser"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+    AdminUserResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/AdminUser"
+    AdminUpdateUserStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ACTIVE, SUSPENDED]
+    AdminAuditLog:
+      type: object
+      required: [id, actorUserId, action, entityType, entityId, details, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        actorUserId:
+          type: [string, "null"]
+          format: uuid
+        action:
+          type: string
+        entityType:
+          type: string
+          enum: [recipe, user]
+        entityId:
+          type: [string, "null"]
+          format: uuid
+        details:
+          type: object
+        createdAt:
+          type: string
+          format: date-time
+    AdminAuditLogListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminAuditLog"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
     PaginationMeta:
       type: object
       required: [page, limit, total, totalPages]
