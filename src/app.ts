@@ -31,6 +31,16 @@ import {
 } from "./modules/categories/category.repository.js";
 import { createCategoryRouter } from "./modules/categories/category.routes.js";
 import {
+  GeminiChatAssistantAdapter,
+  type ChatAssistantAdapter,
+} from "./modules/chat/gemini-chat.adapter.js";
+import {
+  PostgresChatRepository,
+  type ChatRepository,
+} from "./modules/chat/chat.repository.js";
+import { createChatRouter } from "./modules/chat/chat.routes.js";
+import { ChatService } from "./modules/chat/chat.service.js";
+import {
   PostgresCookingSessionRepository,
   type CookingSessionRepository,
 } from "./modules/cooking-sessions/cooking-session.repository.js";
@@ -91,6 +101,8 @@ export interface AppDependencies {
   savedRecipeRepository?: SavedRecipeRepository;
   cookingSessionRepository?: CookingSessionRepository;
   feedbackRepository?: FeedbackRepository;
+  chatRepository?: ChatRepository;
+  chatAssistantAdapter?: ChatAssistantAdapter;
 }
 
 export function createApp(dependencies: AppDependencies = {}) {
@@ -131,6 +143,8 @@ export function createApp(dependencies: AppDependencies = {}) {
     new PostgresCookingSessionRepository(pool);
   const feedbackRepository =
     dependencies.feedbackRepository ?? new PostgresFeedbackRepository(pool);
+  const chatRepository =
+    dependencies.chatRepository ?? new PostgresChatRepository(pool);
   const recipeGenerationAdapter =
     dependencies.recipeGenerationAdapter ??
     createRecipeGenerationAdapter(
@@ -156,6 +170,19 @@ export function createApp(dependencies: AppDependencies = {}) {
     cookingSessionRepository,
   );
   const feedbackService = new FeedbackService(feedbackRepository);
+  const chatAssistantAdapter =
+    dependencies.chatAssistantAdapter ??
+    createChatAssistantAdapter(
+      env.NODE_ENV,
+      env.GEMINI_API_KEY,
+      env.GEMINI_MODEL,
+      env.CHAT_AI_TIMEOUT_MS,
+    );
+  const chatService = new ChatService(
+    chatRepository,
+    chatAssistantAdapter,
+    { recipeCandidateLimit: 8 },
+  );
 
   app.disable("x-powered-by");
   app.use(helmet());
@@ -260,6 +287,14 @@ export function createApp(dependencies: AppDependencies = {}) {
     "/api/v1/me/personalization",
     createPersonalizationRouter(authService, feedbackService),
   );
+  app.use(
+    "/api/v1/chat/conversations",
+    createChatRouter(
+      authService,
+      chatService,
+      env.CHAT_MESSAGE_RATE_LIMIT_PER_MINUTE,
+    ),
+  );
 
   app.use(notFoundHandler);
   app.use(errorHandler);
@@ -296,5 +331,22 @@ function createRecipeGenerationAdapter(
   return new GeminiRecipeGenerationAdapter({
     apiKey,
     model,
+  });
+}
+
+function createChatAssistantAdapter(
+  nodeEnv: "development" | "test" | "production",
+  apiKey: string | undefined,
+  model: string | undefined,
+  timeoutMs: number,
+) {
+  if (nodeEnv === "test" || apiKey === undefined || model === undefined) {
+    return undefined;
+  }
+
+  return new GeminiChatAssistantAdapter({
+    apiKey,
+    model,
+    timeoutMs,
   });
 }

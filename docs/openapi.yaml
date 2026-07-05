@@ -820,6 +820,76 @@ paths:
           $ref: "#/components/responses/Error"
         "403":
           $ref: "#/components/responses/Error"
+  /api/v1/chat/conversations:
+    post:
+      tags: [Chat]
+      security:
+        - bearerAuth: []
+      summary: Tạo conversation Phụ Bếp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateChatConversationRequest"
+      responses:
+        "201":
+          description: Conversation đã được tạo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatConversationResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Error"
+  /api/v1/chat/conversations/{id}/messages:
+    get:
+      tags: [Chat]
+      security:
+        - bearerAuth: []
+      summary: Xem message trong conversation Phụ Bếp
+      parameters:
+        - $ref: "#/components/parameters/UuidId"
+      responses:
+        "200":
+          description: Danh sách message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatMessageListResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    post:
+      tags: [Chat]
+      security:
+        - bearerAuth: []
+      summary: Gửi message và nhận trả lời từ Phụ Bếp
+      parameters:
+        - $ref: "#/components/parameters/UuidId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendChatMessageRequest"
+      responses:
+        "201":
+          description: Message user và assistant đã được lưu
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendChatMessageResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
 components:
   securitySchemes:
     bearerAuth:
@@ -1836,6 +1906,128 @@ components:
             $ref: "#/components/schemas/AdminAuditLog"
         meta:
           $ref: "#/components/schemas/PaginationMeta"
+    CreateChatConversationRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 160
+    SendChatMessageRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+    ChatConversation:
+      type: object
+      required: [id, userId, title, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+          enum: [ACTIVE, ARCHIVED]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ChatRecipeReference:
+      type: object
+      required: [id, slug, title]
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        title:
+          type: string
+    ChatMessage:
+      type: object
+      required:
+        - id
+        - conversationId
+        - role
+        - content
+        - recipeReferences
+        - model
+        - latencyMs
+        - tokenCount
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversationId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+        recipeReferences:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatRecipeReference"
+        model:
+          type: [string, "null"]
+        latencyMs:
+          type: [integer, "null"]
+        tokenCount:
+          type: [integer, "null"]
+        createdAt:
+          type: string
+          format: date-time
+    ChatConversationResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/ChatConversation"
+    ChatMessageListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+    SendChatMessageResult:
+      type: object
+      required: [conversation, userMessage, assistantMessage]
+      properties:
+        conversation:
+          $ref: "#/components/schemas/ChatConversation"
+        userMessage:
+          $ref: "#/components/schemas/ChatMessage"
+        assistantMessage:
+          $ref: "#/components/schemas/ChatMessage"
+    SendChatMessageResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/SendChatMessageResult"
     PaginationMeta:
       type: object
       required: [page, limit, total, totalPages]
