@@ -9,6 +9,7 @@ export interface ChatAssistantInput {
   message: string;
   history: Pick<ChatMessageModel, "role" | "content">[];
   recipeCandidates: ChatRecipeCandidateModel[];
+  userContext: string | null;
 }
 
 export interface ChatAssistantReply {
@@ -179,6 +180,8 @@ function buildGeminiContents(input: ChatAssistantInput) {
       : input.history
           .map((message) => `${message.role}: ${message.content}`)
           .join("\n");
+  const userContext =
+    input.userContext ?? "Chua co tin hieu ca nhan hoa dai han cho nguoi dung nay.";
 
   return [
     {
@@ -186,11 +189,16 @@ function buildGeminiContents(input: ChatAssistantInput) {
       parts: [
         {
           text: [
-            "Ban la Phu Bep, tro ly nau an cua website An Gi Gio?.",
-            "Tra loi bang tieng Viet ngan gon, than thien, uu tien an toan bep nuc.",
-            "Khong dua loi khuyen y te, khong khang dinh an toan tuyet doi ve di ung/thuc pham song.",
-            "Neu can goi y cong thuc, chi reference slug nam trong Recipe context.",
-            "Tra ve duy nhat JSON object theo schema: content va recipeReferences.",
+            "Bạn là Phụ Bếp, trợ lý nấu ăn của website Ăn Gì Giờ?.",
+            "Người dùng có thể hỏi bằng tiếng Việt có dấu, không dấu, viết tắt hoặc tên nguyên liệu quen thuộc ở Việt Nam.",
+            "Hãy hiểu ý định theo ngữ cảnh nấu ăn Việt Nam và luôn trả lời bằng tiếng Việt tự nhiên, ngắn gọn, thân thiện.",
+            "Ưu tiên an toàn bếp núc. Không đưa lời khuyên y tế, không khẳng định an toàn tuyệt đối về dị ứng hoặc thực phẩm sống.",
+            "Nếu có tín hiệu cá nhân hóa, dùng như gợi ý mềm; câu hỏi hiện tại của người dùng vẫn là ưu tiên cao nhất.",
+            "Nếu cần gợi ý công thức, chỉ reference slug nằm trong Recipe context.",
+            "Trả về duy nhất JSON object theo schema: content và recipeReferences.",
+            "",
+            "User personalization context:",
+            userContext,
             "",
             "Recipe context:",
             recipeContext,

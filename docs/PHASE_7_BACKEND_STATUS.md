@@ -14,6 +14,8 @@ Implemented:
 - Conversation ownership check prevents one user from reading or writing another user's chat.
 - Gemini chat adapter separated from recipe-generation adapter.
 - Structured assistant output with `content` and `recipeReferences`.
+- Gemini prompt is optimized for Vietnamese user messages, including accented and unaccented Vietnamese.
+- Phu Bep receives feedback-based personalization context when the user has prior cooking feedback.
 - Recipe references are resolved against public `PUBLISHED` + `APPROVED` recipes before saving.
 - Fallback answer is stored when Gemini is not configured, times out or returns invalid data.
 - In-memory per-user message rate limit for the Phase 7 baseline.
