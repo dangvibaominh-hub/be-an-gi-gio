@@ -45,6 +45,9 @@ const envSchema = z.object({
     .default(20),
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_PUBLISHABLE_KEY: z.string().min(1).optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
+  SUPABASE_STORAGE_BUCKET: z.string().trim().min(1).default("recipe-images"),
+  SUPABASE_RECIPE_IMAGE_FOLDER: z.string().trim().default("recipes"),
   NEXT_PUBLIC_SUPABASE_URL: z.string().url().optional(),
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().min(1).optional(),
 }).transform((env) => {

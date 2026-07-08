@@ -21,14 +21,28 @@ import {
   adminUserIdParamsSchema,
 } from "./admin.schemas.js";
 import { AdminService } from "./admin.service.js";
+import type { RecipeImageStorage } from "./admin-upload.js";
+import {
+  createRecipeMultipartBodyParser,
+  rejectJsonRecipeImageUrl,
+  requireMultipartRecipeImageUpload,
+} from "./admin-upload.js";
 
 export function createAdminRouter(
   authService: AuthService,
   adminRepository: AdminRepository,
+  recipeImageStorage: RecipeImageStorage,
 ) {
   const router = Router();
   const controller = new AdminController(new AdminService(adminRepository));
   const adminGuard = [authenticate(authService), requireRole("ADMIN")];
+  const parseCreateRecipeMultipart = createRecipeMultipartBodyParser(
+    recipeImageStorage,
+    { requireImage: true },
+  );
+  const parseUpdateRecipeMultipart = createRecipeMultipartBodyParser(
+    recipeImageStorage,
+  );
 
   router.use(adminGuard);
 
@@ -39,6 +53,8 @@ export function createAdminRouter(
   );
   router.post(
     "/recipes",
+    requireMultipartRecipeImageUpload,
+    parseCreateRecipeMultipart,
     validateBody(adminCreateRecipeSchema),
     controller.createRecipe,
   );
@@ -50,6 +66,8 @@ export function createAdminRouter(
   router.patch(
     "/recipes/:id",
     validateParams(adminRecipeIdParamsSchema),
+    parseUpdateRecipeMultipart,
+    rejectJsonRecipeImageUrl,
     validateBody(adminUpdateRecipeSchema),
     controller.updateRecipe,
   );

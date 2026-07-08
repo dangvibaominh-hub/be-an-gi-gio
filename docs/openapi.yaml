@@ -569,9 +569,9 @@ paths:
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
-              $ref: "#/components/schemas/AdminRecipeWriteRequest"
+              $ref: "#/components/schemas/AdminRecipeMultipartWriteRequest"
       responses:
         "201":
           description: Tạo công thức thành công
@@ -584,6 +584,10 @@ paths:
         "401":
           $ref: "#/components/responses/Error"
         "403":
+          $ref: "#/components/responses/Error"
+        "413":
+          $ref: "#/components/responses/Error"
+        "415":
           $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
@@ -606,6 +610,8 @@ paths:
           $ref: "#/components/responses/Error"
         "403":
           $ref: "#/components/responses/Error"
+        "413":
+          $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
     patch:
@@ -621,6 +627,9 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/AdminRecipePatchRequest"
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/AdminRecipeMultipartPatchRequest"
       responses:
         "200":
           description: Cập nhật công thức thành công
@@ -1567,7 +1576,6 @@ components:
         - slug
         - title
         - description
-        - image
         - imageAlt
         - difficulty
         - cookTimeMinutes
@@ -1588,9 +1596,6 @@ components:
           type: string
           minLength: 10
           maxLength: 1000
-        image:
-          type: string
-          maxLength: 500
         imageAlt:
           type: string
           minLength: 5
@@ -1622,6 +1627,17 @@ components:
           maxItems: 30
           items:
             $ref: "#/components/schemas/AdminRecipeStepInput"
+    AdminRecipeMultipartWriteRequest:
+      type: object
+      required: [recipe, image]
+      properties:
+        recipe:
+          type: string
+          description: JSON string theo AdminRecipeWriteRequest, khong chua field image.
+        image:
+          type: string
+          format: binary
+          description: File anh JPEG, PNG, WebP hoac GIF toi da 5MB; backend upload len Supabase Storage.
     AdminRecipePatchRequest:
       type: object
       description: Cùng field với AdminRecipeWriteRequest nhưng tất cả field đều optional.
@@ -1638,9 +1654,6 @@ components:
           type: string
           minLength: 10
           maxLength: 1000
-        image:
-          type: string
-          maxLength: 500
         imageAlt:
           type: string
           minLength: 5
@@ -1672,6 +1685,16 @@ components:
           maxItems: 30
           items:
             $ref: "#/components/schemas/AdminRecipeStepInput"
+    AdminRecipeMultipartPatchRequest:
+      type: object
+      properties:
+        recipe:
+          type: string
+          description: JSON string theo AdminRecipePatchRequest.
+        image:
+          type: string
+          format: binary
+          description: File anh JPEG, PNG, WebP hoac GIF toi da 5MB; backend upload len Supabase Storage.
     AdminRecipeIngredient:
       type: object
       required: [id, name, amount, unit, prepNote, displayOrder]

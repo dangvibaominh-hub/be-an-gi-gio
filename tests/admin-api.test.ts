@@ -26,6 +26,10 @@ import type {
   CreateAuditLogInput,
 } from "../src/modules/admin/admin.repository.js";
 import type {
+  RecipeImageFile,
+  RecipeImageStorage,
+} from "../src/modules/admin/admin-upload.js";
+import type {
   AdminCreateRecipeInput,
   AdminListAuditLogsQuery,
   AdminListRecipesQuery,
@@ -41,6 +45,10 @@ const adminId = "11111111-1111-4111-8111-111111111111";
 const userId = "22222222-2222-4222-8222-222222222222";
 const recipeId = "33333333-3333-4333-8333-333333333333";
 const geminiRecipeId = "44444444-4444-4444-8444-444444444444";
+const pngImage = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+  "base64",
+);
 const category: AdminCategoryModel = {
   id: "55555555-5555-4555-8555-555555555555",
   slug: "mon-xao",
@@ -357,6 +365,23 @@ class InMemoryAdminRepository implements AdminRepository {
   }
 }
 
+class InMemoryRecipeImageStorage implements RecipeImageStorage {
+  readonly uploads: RecipeImageFile[] = [];
+
+  uploadRecipeImage(file: RecipeImageFile) {
+    this.uploads.push(file);
+    const storagePath = `recipes/test-${this.uploads.length}.${file.extension}`;
+
+    return Promise.resolve({
+      image: `https://storage.example.com/${storagePath}`,
+      contentType: file.mimeType,
+      size: file.content.length,
+      originalFilename: file.filename,
+      storagePath,
+    });
+  }
+}
+
 async function createTestContext() {
   const adminPasswordHash = await hashPassword("adminpass123");
   const userPasswordHash = await hashPassword("userpass123");
@@ -403,11 +428,13 @@ async function createTestContext() {
     updatedAt: user.updatedAt.toISOString(),
   }));
   const adminRepository = new InMemoryAdminRepository(adminUsers);
+  const recipeImageStorage = new InMemoryRecipeImageStorage();
   const app = createApp({
     authRepository: new InMemoryAuthRepository(authUsers),
     adminRepository,
     categoryRepository,
     recipeRepository,
+    recipeImageStorage,
   });
   const adminLogin = await request(app).post("/api/v1/auth/login").send({
     email: "admin@example.com",
@@ -421,6 +448,7 @@ async function createTestContext() {
   return {
     app,
     adminRepository,
+    recipeImageStorage,
     adminToken: (adminLogin.body as AuthResponse).data.tokens.accessToken,
     userToken: (userLogin.body as AuthResponse).data.tokens.accessToken,
   };
@@ -439,12 +467,101 @@ describe("Admin API", () => {
     expect(userResponse.status).toBe(403);
   });
 
+  it("creates recipes with multipart image upload", async () => {
+    const { app, adminToken, recipeImageStorage } = await createTestContext();
+
+    const createResponse = await request(app)
+      .post("/api/v1/admin/recipes")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .field("recipe", JSON.stringify(recipeInputWithoutImage()))
+      .attach("image", pngImage, {
+        filename: "dau-hu.png",
+        contentType: "image/png",
+      });
+
+    expect(createResponse.status).toBe(201);
+    expect(createResponse.body).toMatchObject({
+      success: true,
+      data: {
+        image: "https://storage.example.com/recipes/test-1.png",
+        source: "ADMIN",
+        slug: "dau-hu-xao-nam",
+      },
+    });
+    expect(recipeImageStorage.uploads).toHaveLength(1);
+    expect(recipeImageStorage.uploads[0]).toMatchObject({
+      extension: "png",
+      filename: "dau-hu.png",
+      mimeType: "image/png",
+    });
+  });
+
+  it("rejects non-image recipe uploads in multipart create", async () => {
+    const { app, adminToken } = await createTestContext();
+
+    const createResponse = await request(app)
+      .post("/api/v1/admin/recipes")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .field("recipe", JSON.stringify(recipeInputWithoutImage()))
+      .attach("image", Buffer.from("not an image"), {
+        filename: "note.txt",
+        contentType: "text/plain",
+      });
+
+    expect(createResponse.status).toBe(400);
+    expect(createResponse.body).toMatchObject({
+      error: { code: "UNSUPPORTED_IMAGE_TYPE" },
+    });
+  });
+
+  it("rejects recipe image URLs from admin write APIs", async () => {
+    const { app, adminToken } = await createTestContext();
+
+    const createResponse = await request(app)
+      .post("/api/v1/admin/recipes")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send(recipeInput());
+
+    expect(createResponse.status).toBe(415);
+    expect(createResponse.body).toMatchObject({
+      error: { code: "RECIPE_IMAGE_UPLOAD_REQUIRED" },
+    });
+
+    const multipartCreateResponse = await request(app)
+      .post("/api/v1/admin/recipes")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .field("recipe", JSON.stringify(recipeInput()))
+      .attach("image", pngImage, {
+        filename: "dau-hu.png",
+        contentType: "image/png",
+      });
+
+    expect(multipartCreateResponse.status).toBe(400);
+    expect(multipartCreateResponse.body).toMatchObject({
+      error: { code: "RECIPE_IMAGE_UPLOAD_REQUIRED" },
+    });
+
+    const updateResponse = await request(app)
+      .patch(`/api/v1/admin/recipes/${recipeId}`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ image: "https://example.com/recipe.png" });
+
+    expect(updateResponse.status).toBe(400);
+    expect(updateResponse.body).toMatchObject({
+      error: { code: "RECIPE_IMAGE_UPLOAD_REQUIRED" },
+    });
+  });
+
   it("creates, updates, hides recipes and writes audit logs", async () => {
     const { app, adminRepository, adminToken } = await createTestContext();
     const createResponse = await request(app)
       .post("/api/v1/admin/recipes")
       .set("Authorization", `Bearer ${adminToken}`)
-      .send(recipeInput());
+      .field("recipe", JSON.stringify(recipeInputWithoutImage()))
+      .attach("image", pngImage, {
+        filename: "dau-hu.png",
+        contentType: "image/png",
+      });
 
     expect(createResponse.status).toBe(201);
     expect(createResponse.body).toMatchObject({
@@ -577,6 +694,13 @@ function recipeInput(): AdminCreateRecipeInput {
       },
     ],
   };
+}
+
+function recipeInputWithoutImage(): Omit<AdminCreateRecipeInput, "image"> {
+  const { image, ...input } = recipeInput();
+  void image;
+
+  return input;
 }
 
 function createRecipeFixture(

@@ -19,6 +19,10 @@ import {
 } from "./modules/admin/admin.repository.js";
 import { createAdminRouter } from "./modules/admin/admin.routes.js";
 import {
+  createRecipeImageStorage,
+  type RecipeImageStorage,
+} from "./modules/admin/admin-upload.js";
+import {
   PostgresAuthRepository,
   type AuthRepository,
 } from "./modules/auth/auth.repository.js";
@@ -103,6 +107,7 @@ export interface AppDependencies {
   feedbackRepository?: FeedbackRepository;
   chatRepository?: ChatRepository;
   chatAssistantAdapter?: ChatAssistantAdapter;
+  recipeImageStorage?: RecipeImageStorage;
 }
 
 export function createApp(dependencies: AppDependencies = {}) {
@@ -135,6 +140,16 @@ export function createApp(dependencies: AppDependencies = {}) {
     dependencies.authRepository ?? new PostgresAuthRepository(pool);
   const adminRepository =
     dependencies.adminRepository ?? new PostgresAdminRepository(pool);
+  const recipeImageStorage =
+    dependencies.recipeImageStorage ??
+    createRecipeImageStorage({
+      bucket: env.SUPABASE_STORAGE_BUCKET,
+      folder: env.SUPABASE_RECIPE_IMAGE_FOLDER,
+      ...(env.SUPABASE_SERVICE_ROLE_KEY === undefined
+        ? {}
+        : { serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY }),
+      ...(env.SUPABASE_URL === undefined ? {} : { supabaseUrl: env.SUPABASE_URL }),
+    });
   const savedRecipeRepository =
     dependencies.savedRecipeRepository ??
     new PostgresSavedRecipeRepository(pool);
@@ -216,7 +231,10 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.use("/", indexRouter);
   app.use("/api/v1/auth", createAuthRouter(authService));
   app.use("/api/v1/me", createMeRouter(authService));
-  app.use("/api/v1/admin", createAdminRouter(authService, adminRepository));
+  app.use(
+    "/api/v1/admin",
+    createAdminRouter(authService, adminRepository, recipeImageStorage),
+  );
 
   const openApiDocument = loadOpenApiDocument();
   const swaggerHandler = swaggerUi.setup(openApiDocument, {
