@@ -56,6 +56,7 @@ import { CookingSessionService } from "./modules/cooking-sessions/cooking-sessio
 import {
   PostgresFeedbackRepository,
   type FeedbackRepository,
+  type PersonalizationRepository,
 } from "./modules/feedback/feedback.repository.js";
 import {
   createCookingFeedbackRouter,
@@ -105,6 +106,7 @@ export interface AppDependencies {
   savedRecipeRepository?: SavedRecipeRepository;
   cookingSessionRepository?: CookingSessionRepository;
   feedbackRepository?: FeedbackRepository;
+  chatPersonalizationRepository?: PersonalizationRepository;
   chatRepository?: ChatRepository;
   chatAssistantAdapter?: ChatAssistantAdapter;
   recipeImageStorage?: RecipeImageStorage;
@@ -158,6 +160,11 @@ export function createApp(dependencies: AppDependencies = {}) {
     new PostgresCookingSessionRepository(pool);
   const feedbackRepository =
     dependencies.feedbackRepository ?? new PostgresFeedbackRepository(pool);
+  const chatPersonalizationRepository =
+    dependencies.chatPersonalizationRepository ??
+    (env.NODE_ENV === "test" && dependencies.feedbackRepository === undefined
+      ? undefined
+      : feedbackRepository);
   const chatRepository =
     dependencies.chatRepository ?? new PostgresChatRepository(pool);
   const recipeGenerationAdapter =
@@ -197,6 +204,7 @@ export function createApp(dependencies: AppDependencies = {}) {
     chatRepository,
     chatAssistantAdapter,
     { recipeCandidateLimit: 8 },
+    chatPersonalizationRepository,
   );
 
   app.disable("x-powered-by");

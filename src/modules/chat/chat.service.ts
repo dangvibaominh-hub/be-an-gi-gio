@@ -9,6 +9,10 @@ import type {
   ChatAssistantAdapter,
   ChatAssistantReply,
 } from "./gemini-chat.adapter.js";
+import type { PersonalizationInsightModel } from "../feedback/feedback.model.js";
+import type {
+  PersonalizationRepository,
+} from "../feedback/feedback.repository.js";
 import type {
   CreateChatConversationInput,
   SendChatMessageInput,
@@ -25,6 +29,7 @@ export class ChatService {
     private readonly repository: ChatRepository,
     private readonly assistantAdapter: ChatAssistantAdapter | undefined,
     private readonly options: ChatServiceOptions,
+    private readonly personalizationRepository?: PersonalizationRepository,
   ) {}
 
   createConversation(userId: string, input: CreateChatConversationInput) {
@@ -58,10 +63,12 @@ export class ChatService {
       input.content,
       this.options.recipeCandidateLimit,
     );
+    const personalization = await this.getPersonalization(userId);
     const assistantDraft = await this.createAssistantDraft(
       input.content,
       [...previousMessages, userMessage],
       recipeCandidates,
+      personalization,
     );
     const assistantMessage = await this.repository.addMessage({
       conversationId,
@@ -104,6 +111,7 @@ export class ChatService {
     message: string,
     history: ChatMessageModel[],
     recipeCandidates: ChatRecipeCandidateModel[],
+    personalization: PersonalizationInsightModel | undefined,
   ) {
     if (this.assistantAdapter === undefined) {
       return createFallbackDraft(recipeCandidates);
@@ -119,6 +127,7 @@ export class ChatService {
           content: item.content,
         })),
         recipeCandidates,
+        userContext: buildPersonalizationContext(personalization),
       });
 
       if (reply === null) {
@@ -157,6 +166,67 @@ export class ChatService {
       return reference === undefined ? [] : [reference];
     });
   }
+
+  private async getPersonalization(userId: string) {
+    if (this.personalizationRepository === undefined) {
+      return undefined;
+    }
+
+    try {
+      return await this.personalizationRepository.getInsight(userId);
+    } catch {
+      return undefined;
+    }
+  }
+}
+
+function buildPersonalizationContext(
+  personalization: PersonalizationInsightModel | undefined,
+) {
+  if (
+    personalization === undefined ||
+    personalization.feedbackCount === 0 ||
+    personalization.confidence === 0
+  ) {
+    return null;
+  }
+
+  const lines = [
+    `Da co ${personalization.feedbackCount} feedback nau an truoc day; do tin cay ${Math.round(
+      personalization.confidence * 100,
+    )}%.`,
+  ];
+  const { issueCounts, signals } = personalization;
+
+  if (signals.preferQuickRecipes > 0) {
+    lines.push(
+      `Nguoi dung hay thay mon nau lau hon du kien (${issueCounts["took-longer-than-expected"]} lan); uu tien goi y mon nhanh va ke hoach nau gon.`,
+    );
+  }
+
+  if (signals.preferEasyRecipes > 0) {
+    lines.push(
+      `Nguoi dung tung gap kho khi so che/thao tac (${issueCounts["cutting-meat-hard"]} lan); uu tien mon de lam va huong dan ro tung buoc.`,
+    );
+  }
+
+  if (signals.preferIngredientFit > 0) {
+    lines.push(
+      `Nguoi dung hay bi thieu nguyen lieu (${issueCounts["missing-ingredients"]} lan); uu tien cong thuc khop nguyen lieu va goi y cach thay the.`,
+    );
+  }
+
+  if (signals.preferTechniqueGuidance > 0) {
+    lines.push(
+      `Nguoi dung tung gap van de ban dau (${issueCounts["oil-splatter"]} lan); khi phu hop hay nhac meo giam ban dau va thao tac an toan.`,
+    );
+  }
+
+  if (personalization.insights.length > 0) {
+    lines.push(`Insight hien co: ${personalization.insights.join(" ")}`);
+  }
+
+  return lines.join("\n");
 }
 
 function createFallbackDraft(

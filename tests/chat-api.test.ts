@@ -28,6 +28,13 @@ import type {
   ChatAssistantReply,
 } from "../src/modules/chat/gemini-chat.adapter.js";
 import type { SendChatMessageResult } from "../src/modules/chat/chat.types.js";
+import {
+  emptyPersonalizationInsight,
+  type PersonalizationInsightModel,
+} from "../src/modules/feedback/feedback.model.js";
+import type {
+  PersonalizationRepository,
+} from "../src/modules/feedback/feedback.repository.js";
 
 class InMemoryAuthRepository implements AuthRepository {
   private readonly users = new Map<string, AuthUserRecord>();
@@ -250,6 +257,18 @@ class FailingChatAssistantAdapter implements ChatAssistantAdapter {
   }
 }
 
+class InMemoryPersonalizationRepository implements PersonalizationRepository {
+  constructor(
+    private readonly insights = new Map<string, PersonalizationInsightModel>(),
+  ) {}
+
+  getInsight(userId: string) {
+    return Promise.resolve(
+      this.insights.get(userId) ?? emptyPersonalizationInsight(),
+    );
+  }
+}
+
 describe("Chat API", () => {
   it("requires auth for chat conversations", async () => {
     const app = createTestApp();
@@ -367,14 +386,78 @@ describe("Chat API", () => {
     expect(sendData.assistantMessage.content).toContain("Mình chưa thể trả lời");
     expect(sendData.assistantMessage.recipeReferences).toHaveLength(1);
   });
+
+  it("passes personalization context to Gemini from feedback insight", async () => {
+    const adapter = new StaticChatAssistantAdapter({
+      content: "Phu Bep se uu tien mon nhanh, de lam cho ban.",
+      recipeReferences: [{ slug: "rau-muong-xao-toi" }],
+    });
+    const personalizationRepository = new InMemoryPersonalizationRepository(
+      new Map([
+        [
+          "user-1",
+          {
+            feedbackCount: 4,
+            averageRating: 3.5,
+            confidence: 0.8,
+            signals: {
+              preferEasyRecipes: 0.04,
+              preferQuickRecipes: 0.08,
+              preferIngredientFit: 0.04,
+              preferTechniqueGuidance: 0,
+            },
+            issueCounts: {
+              "cutting-meat-hard": 2,
+              "oil-splatter": 0,
+              "took-longer-than-expected": 3,
+              "missing-ingredients": 1,
+            },
+            insights: [
+              "Uu tien mon nhanh hon thoi gian du kien.",
+              "Tang uu tien cong thuc khop nguyen lieu dang co.",
+            ],
+            updatedAt: "2026-07-08T00:00:00.000Z",
+          },
+        ],
+      ]),
+    );
+    const app = createTestApp({
+      chatAssistantAdapter: adapter,
+      chatPersonalizationRepository: personalizationRepository,
+    });
+    const token = await registerAndGetToken(app, "context@example.com");
+    const conversationResponse = await request(app)
+      .post("/api/v1/chat/conversations")
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+    const conversationId =
+      responseData<ChatConversationModel>(conversationResponse).id;
+
+    const sendResponse = await request(app)
+      .post(`/api/v1/chat/conversations/${conversationId}/messages`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ content: "Toi nen nau gi nhanh?" });
+
+    expect(sendResponse.status).toBe(201);
+    expect(adapter.inputs[0]?.userContext).toContain("feedback nau an");
+    expect(adapter.inputs[0]?.userContext).toContain("mon nau lau hon du kien");
+    expect(adapter.inputs[0]?.userContext).toContain("khop nguyen lieu");
+  });
 });
 
 function createTestApp(options: {
   chatAssistantAdapter?: ChatAssistantAdapter;
+  chatPersonalizationRepository?: PersonalizationRepository;
 } = {}) {
   return createApp({
     authRepository: new InMemoryAuthRepository(),
     chatRepository: new InMemoryChatRepository(),
+    ...(options.chatPersonalizationRepository === undefined
+      ? {}
+      : {
+          chatPersonalizationRepository:
+            options.chatPersonalizationRepository,
+        }),
     ...(options.chatAssistantAdapter === undefined
       ? {}
       : { chatAssistantAdapter: options.chatAssistantAdapter }),
