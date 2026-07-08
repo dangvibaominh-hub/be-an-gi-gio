@@ -35,6 +35,11 @@ Backend co 2 che do ket noi:
 Project da load ca `.env` va `.env.local`; `.env.local` phu hop de giu cau
 hinh Supabase tren may local.
 
+Admin upload anh cong thuc dung Supabase Storage. Can cau hinh
+`SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET` va
+`SUPABASE_RECIPE_IMAGE_FOLDER`; bucket nen public de URL anh tra ve co the hien
+thi truc tiep tren frontend.
+
 API mặc định chạy tại `http://localhost:4000`. Swagger UI có tại
 `http://localhost:4000/docs` (`/api-docs` vẫn được giữ để tương thích ngược).
 Production docs: `https://api-production-afd7.up.railway.app/docs`.
