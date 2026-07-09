@@ -469,7 +469,9 @@ describe("Chat API", () => {
       model: null,
       tokenCount: null,
     });
-    expect(sendData.assistantMessage.content).toContain("Mình chưa thể trả lời");
+    expect(sendData.assistantMessage.content).toContain(
+      "Phụ Bếp chưa thể trả lời bạn",
+    );
     expect(sendData.assistantMessage.recipeReferences).toHaveLength(1);
   });
 

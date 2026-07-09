@@ -469,8 +469,8 @@ function createFallbackDraft(
   const recipeReferences = candidates.slice(0, 2).map(toRecipeReference);
   const content =
     recipeReferences.length === 0
-      ? "Mình chưa thể trả lời bằng Phụ Bếp lúc này. Bạn có thể thử tìm trong danh sách công thức có sẵn và quay lại sau."
-      : "Mình chưa thể trả lời bằng Phụ Bếp lúc này. Bạn có thể tham khảo vài công thức có sẵn trong hệ thống trước nhé.";
+      ? "Phụ Bếp chưa thể trả lời bạn lúc này. Bạn có thể thử tìm trong danh sách công thức có sẵn và quay lại sau."
+      : "Phụ Bếp chưa thể trả lời bạn lúc này. Bạn có thể tham khảo vài công thức có sẵn trong hệ thống trước nhé.";
 
   return {
     content,
