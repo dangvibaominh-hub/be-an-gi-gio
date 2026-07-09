@@ -23,6 +23,8 @@ export interface RecipeGenerationAdapter {
 interface GeminiRecipeGenerationAdapterOptions {
   apiKey: string;
   model: string;
+  fallbackModels?: string[];
+  timeoutMs?: number;
   fetchFn?: typeof fetch;
 }
 
@@ -50,61 +52,162 @@ export class GeminiRecipeGenerationAdapter
   readonly model: string;
   private readonly apiKey: string;
   private readonly fetchFn: typeof fetch;
+  private readonly modelCandidates: string[];
+  private readonly timeoutMs: number;
 
   constructor(options: GeminiRecipeGenerationAdapterOptions) {
     this.apiKey = options.apiKey;
     this.model = options.model;
     this.fetchFn = options.fetchFn ?? fetch;
+    this.modelCandidates = createModelCandidates(
+      options.model,
+      options.fallbackModels ?? [],
+    );
+    this.timeoutMs = options.timeoutMs ?? 10_000;
   }
 
   async generateRecipe(
     input: RecipeGenerationInput,
   ): Promise<GeneratedRecipe | null> {
-    const response = await this.fetchFn(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-        this.model,
-      )}:generateContent?key=${encodeURIComponent(this.apiKey)}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: buildRecipePrompt(input) }],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 4096,
-            responseMimeType: "application/json",
-            responseSchema: geminiRecipeResponseSchema,
-          },
-        }),
-      },
-    );
+    let retryableError: unknown;
 
-    if (!response.ok) {
-      throw new Error(`Gemini request failed with status ${response.status}.`);
+    for (const [index, model] of this.modelCandidates.entries()) {
+      try {
+        return await this.generateRecipeWithModel(input, model);
+      } catch (error) {
+        const hasNextModel = index < this.modelCandidates.length - 1;
+
+        if (hasNextModel && isRetryableGeminiError(error)) {
+          retryableError = error;
+          continue;
+        }
+
+        throw retryableError === undefined
+          ? error
+          : buildGeminiFallbackError("recipe", retryableError, error);
+      }
     }
 
-    const payload = (await response.json()) as unknown;
-    const directRecipe = generatedRecipeSchema.safeParse(payload);
-
-    if (directRecipe.success) {
-      return directRecipe.data;
-    }
-
-    const text = extractGeneratedText(payload);
-
-    if (text === null) {
-      return null;
-    }
-
-    return generatedRecipeSchema.parse(JSON.parse(stripJsonFence(text)));
+    return null;
   }
+
+  private async generateRecipeWithModel(
+    input: RecipeGenerationInput,
+    model: string,
+  ): Promise<GeneratedRecipe | null> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    try {
+      const response = await this.fetchFn(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+          model,
+        )}:generateContent?key=${encodeURIComponent(this.apiKey)}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [{ text: buildRecipePrompt(input) }],
+              },
+            ],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 4096,
+              responseMimeType: "application/json",
+              responseSchema: geminiRecipeResponseSchema,
+            },
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const preview = await readGeminiErrorPreview(response);
+
+        throw new GeminiHttpError(
+          buildGeminiHttpErrorMessage("recipe", model, response, preview),
+          response.status,
+          model,
+        );
+      }
+
+      const payload = (await response.json()) as unknown;
+      const directRecipe = generatedRecipeSchema.safeParse(payload);
+
+      if (directRecipe.success) {
+        return directRecipe.data;
+      }
+
+      const text = extractGeneratedText(payload);
+
+      if (text === null) {
+        return null;
+      }
+
+      return generatedRecipeSchema.parse(JSON.parse(stripJsonFence(text)));
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+class GeminiHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly model: string,
+  ) {
+    super(message);
+    this.name = "GeminiHttpError";
+  }
+}
+
+function createModelCandidates(primaryModel: string, fallbackModels: string[]) {
+  return Array.from(new Set([primaryModel, ...fallbackModels]));
+}
+
+function isRetryableGeminiError(error: unknown) {
+  return (
+    error instanceof GeminiHttpError &&
+    [429, 500, 502, 503, 504].includes(error.status)
+  );
+}
+
+function buildGeminiFallbackError(
+  feature: string,
+  firstError: unknown,
+  lastError: unknown,
+) {
+  return new Error(
+    [
+      `Gemini ${feature} request failed across configured models.`,
+      `First error: ${formatErrorMessage(firstError)}`,
+      `Last error: ${formatErrorMessage(lastError)}`,
+    ].join(" "),
+  );
+}
+
+function formatErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function buildGeminiHttpErrorMessage(
+  feature: string,
+  model: string,
+  response: Response,
+  preview: string | null,
+) {
+  return [
+    `Gemini ${feature} request failed for model ${model} with status ${response.status}`,
+    response.statusText.trim().length === 0 ? "" : ` ${response.statusText}`,
+    preview === null ? "" : `: ${preview}`,
+    ".",
+  ].join("");
 }
 
 function buildRecipePrompt(input: RecipeGenerationInput) {
@@ -184,4 +287,15 @@ function stripJsonFence(text: string) {
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/i, "")
     .trim();
+}
+
+async function readGeminiErrorPreview(response: Response) {
+  try {
+    const text = await response.text();
+    const normalized = text.replace(/\s+/g, " ").trim();
+
+    return normalized.length === 0 ? null : normalized.slice(0, 500);
+  } catch {
+    return null;
+  }
 }

@@ -1,4 +1,5 @@
 import { AppError } from "../../shared/http/app-error.js";
+import { logger } from "../../config/logger.js";
 import type {
   ChatMessageModel,
   ChatRecipeCandidateModel,
@@ -165,7 +166,15 @@ export class ChatService {
         latencyMs: Date.now() - startedAt,
         tokenCount: null,
       };
-    } catch {
+    } catch (error) {
+      logger.warn(
+        {
+          error: serializeGeminiError(error),
+          feature: "chat.recipe_generation",
+          userId,
+        },
+        "Gemini recipe draft generation failed; falling back to chat assistant.",
+      );
       return null;
     }
   }
@@ -206,7 +215,14 @@ export class ChatService {
         latencyMs: Date.now() - startedAt,
         tokenCount: reply.tokenCount ?? null,
       };
-    } catch {
+    } catch (error) {
+      logger.warn(
+        {
+          error: serializeGeminiError(error),
+          feature: "chat.reply",
+        },
+        "Gemini chat reply failed; using fallback assistant draft.",
+      );
       return createFallbackDraft(recipeCandidates, Date.now() - startedAt);
     }
   }
@@ -461,5 +477,19 @@ function toRecipeReference(
     id: recipe.id,
     slug: recipe.slug,
     title: recipe.title,
+  };
+}
+
+function serializeGeminiError(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
+  }
+
+  return {
+    message: String(error),
   };
 }
