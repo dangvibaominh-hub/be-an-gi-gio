@@ -26,7 +26,6 @@ export interface ChatAssistantAdapter {
 interface GeminiChatAssistantAdapterOptions {
   apiKey: string;
   model: string;
-  fallbackModels?: string[];
   timeoutMs: number;
   fetchFn?: typeof fetch;
 }
@@ -99,48 +98,17 @@ export class GeminiChatAssistantAdapter implements ChatAssistantAdapter {
   readonly model: string;
   private readonly apiKey: string;
   private readonly fetchFn: typeof fetch;
-  private readonly modelCandidates: string[];
   private readonly timeoutMs: number;
 
   constructor(options: GeminiChatAssistantAdapterOptions) {
     this.apiKey = options.apiKey;
     this.model = options.model;
     this.fetchFn = options.fetchFn ?? fetch;
-    this.modelCandidates = createModelCandidates(
-      options.model,
-      options.fallbackModels ?? [],
-    );
     this.timeoutMs = options.timeoutMs;
   }
 
   async generateReply(
     input: ChatAssistantInput,
-  ): Promise<ChatAssistantReply | null> {
-    let retryableError: unknown;
-
-    for (const [index, model] of this.modelCandidates.entries()) {
-      try {
-        return await this.generateReplyWithModel(input, model);
-      } catch (error) {
-        const hasNextModel = index < this.modelCandidates.length - 1;
-
-        if (hasNextModel && isRetryableGeminiError(error)) {
-          retryableError = error;
-          continue;
-        }
-
-        throw retryableError === undefined
-          ? error
-          : buildGeminiFallbackError("chat", retryableError, error);
-      }
-    }
-
-    return null;
-  }
-
-  private async generateReplyWithModel(
-    input: ChatAssistantInput,
-    model: string,
   ): Promise<ChatAssistantReply | null> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -148,7 +116,7 @@ export class GeminiChatAssistantAdapter implements ChatAssistantAdapter {
     try {
       const response = await this.fetchFn(
         `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-          model,
+          this.model,
         )}:generateContent?key=${encodeURIComponent(this.apiKey)}`,
         {
           method: "POST",
@@ -171,10 +139,13 @@ export class GeminiChatAssistantAdapter implements ChatAssistantAdapter {
       if (!response.ok) {
         const preview = await readGeminiErrorPreview(response);
 
-        throw new GeminiHttpError(
-          buildGeminiHttpErrorMessage("chat", model, response, preview),
-          response.status,
-          model,
+        throw new Error(
+          [
+            `Gemini chat request failed for model ${this.model} with status ${response.status}`,
+            response.statusText.trim().length === 0 ? "" : ` ${response.statusText}`,
+            preview === null ? "" : `: ${preview}`,
+            ".",
+          ].join(""),
         );
       }
 
@@ -197,60 +168,6 @@ export class GeminiChatAssistantAdapter implements ChatAssistantAdapter {
       clearTimeout(timeout);
     }
   }
-}
-
-class GeminiHttpError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly model: string,
-  ) {
-    super(message);
-    this.name = "GeminiHttpError";
-  }
-}
-
-function createModelCandidates(primaryModel: string, fallbackModels: string[]) {
-  return Array.from(new Set([primaryModel, ...fallbackModels]));
-}
-
-function isRetryableGeminiError(error: unknown) {
-  return (
-    error instanceof GeminiHttpError &&
-    [429, 500, 502, 503, 504].includes(error.status)
-  );
-}
-
-function buildGeminiFallbackError(
-  feature: string,
-  firstError: unknown,
-  lastError: unknown,
-) {
-  return new Error(
-    [
-      `Gemini ${feature} request failed across configured models.`,
-      `First error: ${formatErrorMessage(firstError)}`,
-      `Last error: ${formatErrorMessage(lastError)}`,
-    ].join(" "),
-  );
-}
-
-function formatErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function buildGeminiHttpErrorMessage(
-  feature: string,
-  model: string,
-  response: Response,
-  preview: string | null,
-) {
-  return [
-    `Gemini ${feature} request failed for model ${model} with status ${response.status}`,
-    response.statusText.trim().length === 0 ? "" : ` ${response.statusText}`,
-    preview === null ? "" : `: ${preview}`,
-    ".",
-  ].join("");
 }
 
 function buildGeminiContents(input: ChatAssistantInput) {
