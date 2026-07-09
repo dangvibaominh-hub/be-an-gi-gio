@@ -308,7 +308,8 @@ paths:
       description: >
         Giai đoạn 2 ưu tiên matching trong database. Nếu không có recipe đạt
         ngưỡng RECOMMENDATION_MATCH_THRESHOLD, backend có thể gọi Gemini để tạo
-        công thức mới, validate schema và lưu recipe với moderation_status PENDING.
+        công thức mới, validate schema và lưu recipe với status DRAFT,
+        moderation_status PENDING.
         Recipe PENDING chỉ trả về cho request hiện tại, chưa xuất hiện trong
         catalog công khai.
       requestBody:
