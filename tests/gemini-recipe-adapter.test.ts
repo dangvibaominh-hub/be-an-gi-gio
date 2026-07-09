@@ -80,4 +80,99 @@ describe("GeminiRecipeGenerationAdapter", () => {
       },
     });
   });
+
+  it("tries a fallback model when the primary model is temporarily unavailable", async () => {
+    const requestedUrls: string[] = [];
+    const generatedRecipe = {
+      title: "Mi Trung Hanh La",
+      description: "Mon mi trung hanh la nhanh gon cho bua an don gian.",
+      imageAlt: "To mi trung hanh la nong",
+      difficulty: "de",
+      cookTimeMinutes: 12,
+      baseServings: 1,
+      category: RECIPE_CATEGORIES[0],
+      ingredients: [
+        { name: "Mi goi", amount: 1, unit: "goi", prepNote: "" },
+        { name: "Trung", amount: 1, unit: "qua", prepNote: "Danh tan" },
+      ],
+      steps: [
+        {
+          content: "Nau mi voi nuoc soi den khi soi mi vua mem.",
+          estimatedMinutes: 4,
+          techniqueIcon: "noi",
+          isTricky: false,
+          timerSeconds: null,
+        },
+        {
+          content: "Cho trung vao khuay nhe, them hanh la va nem vua an.",
+          estimatedMinutes: 3,
+          techniqueIcon: "tron",
+          isTricky: false,
+          timerSeconds: null,
+        },
+      ],
+    };
+    const fetchFn: typeof fetch = (input) => {
+      const url = getRequestUrl(input);
+      requestedUrls.push(url);
+
+      if (url.includes("gemini-primary")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: 503,
+                message: "This model is currently experiencing high demand.",
+                status: "UNAVAILABLE",
+              },
+            }),
+            { status: 503, statusText: "Service Unavailable" },
+          ),
+        );
+      }
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [{ text: JSON.stringify(generatedRecipe) }],
+                },
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      );
+    };
+    const adapter = new GeminiRecipeGenerationAdapter({
+      apiKey: "test-key",
+      model: "gemini-primary",
+      fallbackModels: ["gemini-fallback"],
+      fetchFn,
+    });
+
+    const recipe = await adapter.generateRecipe({
+      ingredients: ["mi goi", "trung"],
+      filters: {},
+    });
+
+    expect(recipe?.title).toBe("Mi Trung Hanh La");
+    expect(requestedUrls).toHaveLength(2);
+    expect(requestedUrls[0]).toContain("gemini-primary");
+    expect(requestedUrls[1]).toContain("gemini-fallback");
+  });
 });
+
+function getRequestUrl(input: Parameters<typeof fetch>[0]) {
+  if (typeof input === "string") {
+    return input;
+  }
+
+  if (input instanceof URL) {
+    return input.toString();
+  }
+
+  return input.url;
+}

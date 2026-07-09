@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { logger } from "../../config/logger.js";
 import {
   normalizeIngredientName,
   tokenizeIngredientName,
@@ -146,7 +147,15 @@ export class RecommendationService {
         aiModel: this.recipeGenerationAdapter.model,
         ...(userId === undefined ? {} : { createdBy: userId }),
       });
-    } catch {
+    } catch (error) {
+      logger.warn(
+        {
+          error: serializeGeminiError(error),
+          feature: "recommendations.generated_fallback",
+          userId: userId ?? null,
+        },
+        "Gemini recommendation fallback generation failed; returning empty recommendations.",
+      );
       return null;
     }
   }
@@ -332,4 +341,18 @@ export function createGeneratedRecipeSlug(title: string) {
   const base = (normalizedTitle || "cong-thuc").slice(0, maxBaseLength);
 
   return `gemini-${base}-${suffix}`;
+}
+
+function serializeGeminiError(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
+  }
+
+  return {
+    message: String(error),
+  };
 }

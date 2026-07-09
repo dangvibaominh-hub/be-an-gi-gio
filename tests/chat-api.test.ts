@@ -318,6 +318,16 @@ class StaticRecipeGenerationAdapter implements RecipeGenerationAdapter {
   }
 }
 
+class FailingRecipeGenerationAdapter implements RecipeGenerationAdapter {
+  readonly model = "gemini-recipe-test";
+  readonly inputs: RecipeGenerationInput[] = [];
+
+  generateRecipe(input: RecipeGenerationInput) {
+    this.inputs.push(input);
+    return Promise.reject(new Error("Gemini recipe unavailable"));
+  }
+}
+
 class InMemoryGeneratedRecipeRepository implements GeneratedRecipeRepository {
   readonly inputs: SaveGeneratedRecipeInput[] = [];
 
@@ -577,6 +587,48 @@ describe("Chat API", () => {
     expect(sendData.assistantMessage.content).toContain("admin");
     expect(sendData.assistantMessage.content).toContain("Mi Trung Hanh La");
     expect(chatAdapter.inputs).toHaveLength(0);
+  });
+
+  it("falls back to the chat assistant when Gemini recipe draft generation fails", async () => {
+    const chatAdapter = new StaticChatAssistantAdapter({
+      content: "Phu Bep van co the goi y mon nhanh tu mi va trung.",
+      recipeReferences: [],
+    });
+    const recipeGenerationAdapter = new FailingRecipeGenerationAdapter();
+    const generatedRecipeRepository = new InMemoryGeneratedRecipeRepository();
+    const app = createTestApp({
+      chatAssistantAdapter: chatAdapter,
+      recipeGenerationAdapter,
+      generatedRecipeRepository,
+    });
+    const token = await registerAndGetToken(app, "draft-fallback@example.com");
+    const conversationResponse = await request(app)
+      .post("/api/v1/chat/conversations")
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+    const conversationId =
+      responseData<ChatConversationModel>(conversationResponse).id;
+
+    const sendResponse = await request(app)
+      .post(`/api/v1/chat/conversations/${conversationId}/messages`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        content:
+          "Tao cong thuc moi de lam voi mi goi, trung va hanh la trong 15 phut",
+      });
+
+    expect(sendResponse.status).toBe(201);
+    const sendData = responseData<SendChatMessageResult>(sendResponse);
+
+    expect(recipeGenerationAdapter.inputs).toHaveLength(1);
+    expect(chatAdapter.inputs).toHaveLength(1);
+    expect(generatedRecipeRepository.inputs).toHaveLength(0);
+    expect(sendData.assistantMessage).toMatchObject({
+      role: "assistant",
+      model: "gemini-test",
+      recipeReferences: [],
+    });
+    expect(sendData.assistantMessage.content).toContain("Phu Bep");
   });
 });
 
