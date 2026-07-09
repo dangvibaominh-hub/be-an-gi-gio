@@ -35,6 +35,16 @@ import {
 import type {
   PersonalizationRepository,
 } from "../src/modules/feedback/feedback.repository.js";
+import { RECIPE_CATEGORIES } from "../src/modules/recipes/recipe.model.js";
+import type {
+  RecipeGenerationAdapter,
+  RecipeGenerationInput,
+} from "../src/modules/recommendations/gemini-recipe.adapter.js";
+import type {
+  GeneratedRecipeRepository,
+  RecommendationCandidate,
+  SaveGeneratedRecipeInput,
+} from "../src/modules/recommendations/recommendation.repository.js";
 
 class InMemoryAuthRepository implements AuthRepository {
   private readonly users = new Map<string, AuthUserRecord>();
@@ -269,6 +279,72 @@ class InMemoryPersonalizationRepository implements PersonalizationRepository {
   }
 }
 
+class StaticRecipeGenerationAdapter implements RecipeGenerationAdapter {
+  readonly model = "gemini-recipe-test";
+  readonly inputs: RecipeGenerationInput[] = [];
+
+  generateRecipe(input: RecipeGenerationInput) {
+    this.inputs.push(input);
+    return Promise.resolve({
+      title: "Mi Trung Hanh La",
+      description: "Mon mi trung hanh la nhanh gon cho bua an don gian tai nha.",
+      imageAlt: "To mi trung hanh la nong voi mau vang hap dan",
+      difficulty: "de" as const,
+      cookTimeMinutes: 12,
+      baseServings: 1,
+      category: RECIPE_CATEGORIES[0],
+      ingredients: [
+        { name: "Mi goi", amount: 1, unit: "goi", prepNote: "" },
+        { name: "Trung", amount: 1, unit: "qua", prepNote: "Danh tan" },
+        { name: "Hanh la", amount: 2, unit: "nhanh", prepNote: "Cat nho" },
+      ],
+      steps: [
+        {
+          content: "Dun soi nuoc, cho mi vao nau vua mem theo huong dan goi.",
+          estimatedMinutes: 4,
+          techniqueIcon: "noi" as const,
+          isTricky: false,
+          timerSeconds: null,
+        },
+        {
+          content: "Do trung vao khuay nhe, them hanh la va nem lai cho vua an.",
+          estimatedMinutes: 3,
+          techniqueIcon: "tron" as const,
+          isTricky: false,
+          timerSeconds: null,
+        },
+      ],
+    });
+  }
+}
+
+class InMemoryGeneratedRecipeRepository implements GeneratedRecipeRepository {
+  readonly inputs: SaveGeneratedRecipeInput[] = [];
+
+  save(input: SaveGeneratedRecipeInput): Promise<RecommendationCandidate> {
+    this.inputs.push(input);
+
+    return Promise.resolve({
+      id: "22222222-2222-4222-8222-222222222222",
+      slug: input.slug,
+      title: input.recipe.title,
+      description: input.recipe.description,
+      image: "/images/recipes/gemini-generated.png",
+      imageAlt: input.recipe.imageAlt,
+      difficulty: input.recipe.difficulty,
+      cookTimeMinutes: input.recipe.cookTimeMinutes,
+      baseServings: input.recipe.baseServings,
+      category: input.recipe.category,
+      ingredients: input.recipe.ingredients.map((ingredient, index) => ({
+        id: `ingredient-${index + 1}`,
+        name: ingredient.name,
+        normalizedName: ingredient.name.toLocaleLowerCase("vi"),
+        aliases: [],
+      })),
+    });
+  }
+}
+
 describe("Chat API", () => {
   it("requires auth for chat conversations", async () => {
     const app = createTestApp();
@@ -443,11 +519,72 @@ describe("Chat API", () => {
     expect(adapter.inputs[0]?.userContext).toContain("mon nau lau hon du kien");
     expect(adapter.inputs[0]?.userContext).toContain("khop nguyen lieu");
   });
+
+  it("creates a pending Gemini recipe draft from an explicit chat request", async () => {
+    const chatAdapter = new StaticChatAssistantAdapter({
+      content: "Khong nen duoc goi khi dang tao cong thuc moi.",
+      recipeReferences: [],
+    });
+    const recipeGenerationAdapter = new StaticRecipeGenerationAdapter();
+    const generatedRecipeRepository = new InMemoryGeneratedRecipeRepository();
+    const app = createTestApp({
+      chatAssistantAdapter: chatAdapter,
+      recipeGenerationAdapter,
+      generatedRecipeRepository,
+    });
+    const token = await registerAndGetToken(app, "draft@example.com");
+    const conversationResponse = await request(app)
+      .post("/api/v1/chat/conversations")
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+    const conversationId =
+      responseData<ChatConversationModel>(conversationResponse).id;
+
+    const sendResponse = await request(app)
+      .post(`/api/v1/chat/conversations/${conversationId}/messages`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        content:
+          "Tao cong thuc moi de lam voi mi goi, trung va hanh la trong 15 phut",
+      });
+
+    expect(sendResponse.status).toBe(201);
+    const sendData = responseData<SendChatMessageResult>(sendResponse);
+
+    expect(recipeGenerationAdapter.inputs).toHaveLength(1);
+    expect(recipeGenerationAdapter.inputs[0]).toMatchObject({
+      ingredients: ["mi goi", "trung", "hanh la"],
+      filters: { difficulties: ["de"], maxCookTimeMinutes: 15 },
+      request:
+        "Tao cong thuc moi de lam voi mi goi, trung va hanh la trong 15 phut",
+    });
+    expect(generatedRecipeRepository.inputs).toHaveLength(1);
+    expect(generatedRecipeRepository.inputs[0]).toMatchObject({
+      aiModel: "gemini-recipe-test",
+      createdBy: "user-1",
+      recipe: { title: "Mi Trung Hanh La" },
+    });
+    expect(generatedRecipeRepository.inputs[0]?.slug).toMatch(
+      /^gemini-mi-trung-hanh-la-/,
+    );
+    expect(sendData.assistantMessage).toMatchObject({
+      role: "assistant",
+      model: "gemini-recipe-test",
+      tokenCount: null,
+      recipeReferences: [],
+    });
+    expect(sendData.assistantMessage.content).toContain("bản nháp");
+    expect(sendData.assistantMessage.content).toContain("admin");
+    expect(sendData.assistantMessage.content).toContain("Mi Trung Hanh La");
+    expect(chatAdapter.inputs).toHaveLength(0);
+  });
 });
 
 function createTestApp(options: {
   chatAssistantAdapter?: ChatAssistantAdapter;
   chatPersonalizationRepository?: PersonalizationRepository;
+  recipeGenerationAdapter?: RecipeGenerationAdapter;
+  generatedRecipeRepository?: GeneratedRecipeRepository;
 } = {}) {
   return createApp({
     authRepository: new InMemoryAuthRepository(),
@@ -461,6 +598,12 @@ function createTestApp(options: {
     ...(options.chatAssistantAdapter === undefined
       ? {}
       : { chatAssistantAdapter: options.chatAssistantAdapter }),
+    ...(options.recipeGenerationAdapter === undefined
+      ? {}
+      : { recipeGenerationAdapter: options.recipeGenerationAdapter }),
+    ...(options.generatedRecipeRepository === undefined
+      ? {}
+      : { generatedRecipeRepository: options.generatedRecipeRepository }),
   });
 }
 

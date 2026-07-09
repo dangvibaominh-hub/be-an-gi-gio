@@ -11,6 +11,8 @@ import {
 export interface RecipeGenerationInput {
   ingredients: string[];
   filters: RecommendationFilters;
+  request?: string;
+  userContext?: string | null;
 }
 
 export interface RecipeGenerationAdapter {
@@ -106,15 +108,28 @@ export class GeminiRecipeGenerationAdapter
 }
 
 function buildRecipePrompt(input: RecipeGenerationInput) {
+  const ingredientText =
+    input.ingredients.length === 0
+      ? "Nguoi dung chua liet ke ro nguyen lieu; hay suy luan tu yeu cau tu nhien neu co."
+      : `Nguyen lieu nguoi dung co: ${input.ingredients.join(", ")}.`;
   const constraints = [
-    `Nguyen lieu nguoi dung co: ${input.ingredients.join(", ")}.`,
+    ingredientText,
     `Chi chon category trong danh sach: ${RECIPE_CATEGORIES.join(", ")}.`,
     "Tra ve duy nhat mot JSON object dung schema, khong markdown, khong giai thich them.",
     "Cong thuc phai viet bang tieng Viet tu nhien, an toan, de lam tai nha.",
     "Hay uu tien dung tat ca nguyen lieu nguoi dung dua vao; co the them gia vi/co ban neu can.",
     "Moi ingredient phai co amount la so duong, unit ngan gon, prepNote co the la chuoi rong.",
     "Moi step can ro thao tac, estimatedMinutes, techniqueIcon trong: dao, chao, noi, tron, hap.",
+    "Khong tra ve URL anh tu Internet va khong bia nguon anh; chi viet imageAlt mo ta mon an ro rang de admin co the chon/upload anh hop le.",
   ];
+
+  if (input.request !== undefined && input.request.trim().length > 0) {
+    constraints.push(`Yeu cau tu nhien cua nguoi dung: ${input.request.trim()}.`);
+  }
+
+  if (input.userContext !== undefined && input.userContext !== null) {
+    constraints.push(`Tin hieu ca nhan hoa: ${input.userContext}`);
+  }
 
   if (input.filters.category !== undefined) {
     constraints.push(`Neu phu hop, uu tien category/filter: ${input.filters.category}.`);

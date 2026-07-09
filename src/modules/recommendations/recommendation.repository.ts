@@ -424,7 +424,7 @@ async function insertRecipe(
        $7,
        $8,
        $9,
-       'PUBLISHED',
+       'DRAFT',
        'GEMINI',
        $10,
        'PENDING',

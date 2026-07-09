@@ -87,5 +87,5 @@ Quy tắc validation dự kiến:
 
 - Không gọi Gemini nếu database có candidate đạt ngưỡng.
 - Structured output phải map được vào schema recipe hiện tại.
-- Recipe do Gemini tạo lưu `source = GEMINI`, `ai_model`, `moderation_status = PENDING`.
+- Recipe do Gemini tạo lưu `source = GEMINI`, `ai_model`, `status = DRAFT`, `moderation_status = PENDING`.
 - Recipe `PENDING` chỉ trả về cho lượt request hiện tại, không xuất hiện trong catalog công khai.

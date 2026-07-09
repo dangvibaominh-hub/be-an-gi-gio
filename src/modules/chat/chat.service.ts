@@ -13,6 +13,14 @@ import type { PersonalizationInsightModel } from "../feedback/feedback.model.js"
 import type {
   PersonalizationRepository,
 } from "../feedback/feedback.repository.js";
+import type { RecipeGenerationAdapter } from "../recommendations/gemini-recipe.adapter.js";
+import type { GeneratedRecipe } from "../recommendations/generated-recipe.schema.js";
+import { normalizeIngredientName } from "../recommendations/ingredient-normalizer.js";
+import type {
+  GeneratedRecipeRepository,
+} from "../recommendations/recommendation.repository.js";
+import { createGeneratedRecipeSlug } from "../recommendations/recommendation.service.js";
+import type { RecommendationFilters } from "../recommendations/recommendation.types.js";
 import type {
   CreateChatConversationInput,
   SendChatMessageInput,
@@ -30,6 +38,8 @@ export class ChatService {
     private readonly assistantAdapter: ChatAssistantAdapter | undefined,
     private readonly options: ChatServiceOptions,
     private readonly personalizationRepository?: PersonalizationRepository,
+    private readonly recipeGenerationAdapter?: RecipeGenerationAdapter,
+    private readonly generatedRecipeRepository?: GeneratedRecipeRepository,
   ) {}
 
   createConversation(userId: string, input: CreateChatConversationInput) {
@@ -64,12 +74,18 @@ export class ChatService {
       this.options.recipeCandidateLimit,
     );
     const personalization = await this.getPersonalization(userId);
-    const assistantDraft = await this.createAssistantDraft(
-      input.content,
-      [...previousMessages, userMessage],
-      recipeCandidates,
-      personalization,
-    );
+    const assistantDraft =
+      (await this.createGeneratedRecipeDraft(
+        input.content,
+        personalization,
+        userId,
+      )) ??
+      (await this.createAssistantDraft(
+        input.content,
+        [...previousMessages, userMessage],
+        recipeCandidates,
+        personalization,
+      ));
     const assistantMessage = await this.repository.addMessage({
       conversationId,
       role: "assistant",
@@ -105,6 +121,53 @@ export class ChatService {
     }
 
     return conversation;
+  }
+
+  private async createGeneratedRecipeDraft(
+    message: string,
+    personalization: PersonalizationInsightModel | undefined,
+    userId: string,
+  ) {
+    if (
+      !shouldCreateGeneratedRecipeDraft(message) ||
+      this.recipeGenerationAdapter === undefined ||
+      this.generatedRecipeRepository === undefined
+    ) {
+      return null;
+    }
+
+    const startedAt = Date.now();
+    const request = buildChatRecipeGenerationRequest(message);
+
+    try {
+      const recipe = await this.recipeGenerationAdapter.generateRecipe({
+        ingredients: request.ingredients,
+        filters: request.filters,
+        request: message,
+        userContext: buildPersonalizationContext(personalization),
+      });
+
+      if (recipe === null) {
+        return null;
+      }
+
+      const savedRecipe = await this.generatedRecipeRepository.save({
+        recipe,
+        slug: createGeneratedRecipeSlug(recipe.title),
+        aiModel: this.recipeGenerationAdapter.model,
+        createdBy: userId,
+      });
+
+      return {
+        content: formatGeneratedRecipeDraft(recipe, savedRecipe.slug),
+        recipeReferences: [],
+        model: this.recipeGenerationAdapter.model,
+        latencyMs: Date.now() - startedAt,
+        tokenCount: null,
+      };
+    } catch {
+      return null;
+    }
   }
 
   private async createAssistantDraft(
@@ -178,6 +241,149 @@ export class ChatService {
       return undefined;
     }
   }
+}
+
+function shouldCreateGeneratedRecipeDraft(message: string) {
+  const normalized = normalizeIngredientName(message);
+
+  if (
+    /\b(khong|dung|chua)\s+(tao|sinh|luu)\b/.test(normalized) ||
+    normalized.length === 0
+  ) {
+    return false;
+  }
+
+  const directGenerationPhrases = [
+    "tao cong thuc",
+    "sinh cong thuc",
+    "viet cong thuc",
+    "nghi cong thuc",
+    "sang tao cong thuc",
+    "tao mon",
+    "nghi mon",
+    "sang tao mon",
+    "cong thuc moi",
+    "mon moi",
+  ];
+
+  if (directGenerationPhrases.some((phrase) => normalized.includes(phrase))) {
+    return true;
+  }
+
+  const hasRecipeSubject = /\b(cong thuc|mon|mon an)\b/.test(normalized);
+  const hasCreateVerb = /\b(tao|sinh|viet|nghi|sang tao)\b/.test(normalized);
+  const asksForNew = /\b(moi|tu dau|chua co san)\b/.test(normalized);
+
+  return hasRecipeSubject && hasCreateVerb && asksForNew;
+}
+
+function buildChatRecipeGenerationRequest(message: string): {
+  ingredients: string[];
+  filters: RecommendationFilters;
+} {
+  return {
+    ingredients: extractGenerationIngredients(message),
+    filters: extractGenerationFilters(message),
+  };
+}
+
+function extractGenerationIngredients(message: string) {
+  const normalized = normalizeTextForIngredientParsing(message);
+  const markerPatterns = [
+    /\b(?:toi|minh|em|tui)\s+co\s+(.+)$/,
+    /\bnguyen lieu(?:\s+(?:la|gom|co))?\s+(.+)$/,
+    /\b(?:voi|bang)\s+(?:cac\s+)?(?:nguyen lieu\s+)?(.+)$/,
+    /\b(?:cong thuc|mon|mon an)(?:\s+moi)?\s+tu\s+(?:cac\s+)?(?:nguyen lieu\s+)?(.+)$/,
+  ];
+  const matched = markerPatterns
+    .map((pattern) => normalized.match(pattern)?.[1])
+    .find((value): value is string => value !== undefined && value.length > 0);
+
+  if (matched === undefined) {
+    return [];
+  }
+
+  return matched
+    .replace(/\b(?:trong|duoi|toi da|khong qua)\s+\d{1,3}\s*(?:phut|p)\b/g, " ")
+    .replace(/\b(?:cho\s+)?\d{1,2}\s*(?:nguoi|khau phan|phan)\b/g, " ")
+    .replace(
+      /\b(?:de lam|don gian|nhanh|nhanh gon|it dau|cong thuc|mon an|mon|moi|nguyen lieu)\b/g,
+      " ",
+    )
+    .split(/,|\+|\/|\bva\b|\bcung\b/)
+    .map((ingredient) => ingredient.replace(/\s+/g, " ").trim())
+    .filter((ingredient) => ingredient.length >= 2 && ingredient.length <= 80)
+    .slice(0, 12);
+}
+
+function normalizeTextForIngredientParsing(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\u0111\u0110]/g, "d")
+    .toLocaleLowerCase("vi")
+    .replace(/[^a-z0-9\s,+/]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractGenerationFilters(message: string): RecommendationFilters {
+  const normalized = normalizeIngredientName(message);
+  const filters: RecommendationFilters = {};
+
+  if (
+    /\b(de lam|don gian|nhanh gon|cho nguoi moi|nguoi moi nau)\b/.test(
+      normalized,
+    )
+  ) {
+    filters.difficulties = ["de"];
+  }
+
+  const timeMatch = normalized.match(
+    /\b(?:trong|duoi|toi da|khong qua)?\s*(\d{1,3})\s*(?:phut|p)\b/,
+  );
+  if (timeMatch?.[1] !== undefined) {
+    filters.maxCookTimeMinutes = Number(timeMatch[1]);
+  }
+
+  const servingsMatch = normalized.match(
+    /\b(?:cho\s*)?(\d{1,2})\s*(?:nguoi|khau phan|phan)\b/,
+  );
+  if (servingsMatch?.[1] !== undefined) {
+    filters.servings = Number(servingsMatch[1]);
+  }
+
+  return filters;
+}
+
+function formatGeneratedRecipeDraft(recipe: GeneratedRecipe, slug: string) {
+  const ingredients = recipe.ingredients
+    .slice(0, 10)
+    .map(
+      (ingredient) =>
+        `- ${ingredient.name}: ${ingredient.amount} ${ingredient.unit}${
+          ingredient.prepNote.length === 0 ? "" : `, ${ingredient.prepNote}`
+        }`,
+    );
+  const steps = recipe.steps
+    .slice(0, 8)
+    .map((step, index) => `${index + 1}. ${step.content}`);
+
+  return [
+    "Mình đã tạo một bản nháp công thức mới bằng Gemini. Bản nháp này đang chờ admin kiểm tra và chưa xuất hiện trong catalog chính thức.",
+    "",
+    `Tên món: ${recipe.title}`,
+    `Thời gian: khoảng ${recipe.cookTimeMinutes} phút | Độ khó: ${recipe.difficulty} | Khẩu phần: ${recipe.baseServings}`,
+    `Mã bản nháp cho admin kiểm tra: ${slug}`,
+    "",
+    "Nguyên liệu:",
+    ...ingredients,
+    "",
+    "Cách làm:",
+    ...steps,
+    "",
+    "Ảnh món ăn hiện dùng placeholder. Khi duyệt, admin nên kiểm tra nội dung và upload ảnh thật hoặc ảnh có quyền sử dụng.",
+  ].join("\n");
 }
 
 function buildPersonalizationContext(

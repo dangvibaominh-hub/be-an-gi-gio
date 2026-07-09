@@ -205,6 +205,8 @@ export function createApp(dependencies: AppDependencies = {}) {
     chatAssistantAdapter,
     { recipeCandidateLimit: 8 },
     chatPersonalizationRepository,
+    recipeGenerationAdapter,
+    generatedRecipeRepository,
   );
 
   app.disable("x-powered-by");

@@ -323,7 +323,7 @@ function emptyRecommendations(query: RecommendationQuery): PaginatedRecommendati
   };
 }
 
-function createGeneratedRecipeSlug(title: string) {
+export function createGeneratedRecipeSlug(title: string) {
   const normalizedTitle = normalizeIngredientName(title)
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");

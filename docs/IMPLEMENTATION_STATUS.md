@@ -18,7 +18,7 @@ Mốc nghiệm thu tương ứng:
 
 - M1 — Catalog: backend đã sẵn sàng vì có schema, seed, API danh sách/filter/chi tiết, pagination, validation, index và dữ liệu thật trên Supabase.
 - M1 chưa thể xem là hoàn tất toàn dự án nếu frontend chưa thay mock data bằng API thật.
-- M2 — Recommendation đã có backend database matching, auth personalization và Gemini fallback lưu recipe `PENDING`. Workflow Admin kiểm duyệt recipe `PENDING` chưa triển khai.
+- M2 — Recommendation đã có backend database matching, auth personalization và Gemini fallback lưu recipe `PENDING`. Workflow Admin kiểm duyệt recipe `PENDING` đã triển khai ở Phase 6.
 
 ## Đối chiếu Giai đoạn 0
 
@@ -90,14 +90,14 @@ Các việc này là chuẩn bị cho Giai đoạn 2, không phải thiếu sót
 - Nếu request có Bearer token hợp lệ, recommendation boost nhẹ công thức user đã lưu.
 - Gemini fallback chỉ chạy khi không có recipe database đạt `RECOMMENDATION_MATCH_THRESHOLD`.
 - Gemini output bị ép JSON schema, validate lại bằng Zod trước khi lưu.
-- Recipe AI được lưu với `source = GEMINI`, `ai_model = GEMINI_MODEL`, `moderation_status = PENDING`.
+- Recipe AI được lưu với `source = GEMINI`, `ai_model = GEMINI_MODEL`, `status = DRAFT`, `moderation_status = PENDING`.
 - Recipe `PENDING` chỉ trả về cho request hiện tại, không xuất hiện trong catalog công khai.
 - OpenAPI chính thức đã có contract recommendation.
 - Seed cập nhật alias cho các nguyên liệu phổ biến và nguyên liệu ghép.
 
 Còn chưa triển khai sau phần backend hiện tại:
 
-- Workflow Admin kiểm duyệt recipe `PENDING` để approve/reject công thức do Gemini tạo.
+- Tìm nguồn ảnh thật có giấy phép cho recipe Gemini; hiện backend dùng placeholder và để admin upload ảnh khi duyệt.
 
 ## Giai đoạn 3 — Đã triển khai backend nền tảng
 
