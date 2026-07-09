@@ -32,43 +32,20 @@ interface GeminiChatAssistantAdapterOptions {
 
 const chatAssistantReplySchema = z
   .object({
-    content: z.string().trim().min(1).max(2_000),
+    content: z
+      .string()
+      .trim()
+      .min(1)
+      .transform((value) => value.slice(0, 2_000)),
     recipeReferences: z
       .array(
-        z
-          .object({
-            slug: z.string().trim().min(1).max(180),
-          })
-          .strict(),
+        z.object({
+          slug: z.string().trim().min(1).max(180),
+        }),
       )
-      .max(5)
-      .default([]),
-  })
-  .strict();
-
-const geminiChatResponseSchema = {
-  type: "OBJECT",
-  properties: {
-    content: {
-      type: "STRING",
-      description: "Vietnamese assistant answer for the cooking question.",
-    },
-    recipeReferences: {
-      type: "ARRAY",
-      items: {
-        type: "OBJECT",
-        properties: {
-          slug: {
-            type: "STRING",
-            description: "Recipe slug selected only from the provided recipe context.",
-          },
-        },
-        required: ["slug"],
-      },
-    },
-  },
-  required: ["content", "recipeReferences"],
-} as const;
+      .default([])
+      .transform((value) => value.slice(0, 5)),
+  });
 
 const geminiGenerateContentResponseSchema = z.object({
   candidates: z
@@ -130,7 +107,6 @@ export class GeminiChatAssistantAdapter implements ChatAssistantAdapter {
               temperature: 0.4,
               maxOutputTokens: 2048,
               responseMimeType: "application/json",
-              responseSchema: geminiChatResponseSchema,
             },
           }),
         },
@@ -159,10 +135,14 @@ export class GeminiChatAssistantAdapter implements ChatAssistantAdapter {
       const text = extractGeneratedText(payload);
 
       if (text === null) {
-        return null;
+        throw new Error(
+          `Gemini chat response for model ${this.model} did not include generated text: ${previewPayload(
+            payload,
+          )}`,
+        );
       }
 
-      const reply = chatAssistantReplySchema.parse(JSON.parse(stripJsonFence(text)));
+      const reply = parseAssistantReplyText(text);
       return withTokenCount(reply, payload);
     } finally {
       clearTimeout(timeout);
@@ -260,6 +240,63 @@ function stripJsonFence(text: string) {
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/i, "")
     .trim();
+}
+
+function parseAssistantReplyText(text: string): ChatAssistantReply {
+  const strippedText = stripJsonFence(text);
+
+  if (strippedText.length === 0) {
+    throw new Error("Gemini chat response did not include usable assistant text.");
+  }
+
+  const structuredReply = parseStructuredReply(strippedText);
+
+  if (structuredReply !== null) {
+    return structuredReply;
+  }
+
+  const jsonObjectText = extractJsonObjectText(strippedText);
+  if (jsonObjectText !== null) {
+    const extractedReply = parseStructuredReply(jsonObjectText);
+
+    if (extractedReply !== null) {
+      return extractedReply;
+    }
+  }
+
+  return {
+    content: strippedText.slice(0, 2_000),
+    recipeReferences: [],
+  };
+}
+
+function parseStructuredReply(text: string) {
+  try {
+    const parsed = chatAssistantReplySchema.safeParse(JSON.parse(text));
+
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractJsonObjectText(text: string) {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+
+  if (start === -1 || end === -1 || end <= start) {
+    return null;
+  }
+
+  return text.slice(start, end + 1);
+}
+
+function previewPayload(payload: unknown) {
+  try {
+    return JSON.stringify(payload).replace(/\s+/g, " ").slice(0, 500);
+  } catch {
+    return "[unserializable payload]";
+  }
 }
 
 async function readGeminiErrorPreview(response: Response) {

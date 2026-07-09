@@ -186,6 +186,10 @@ export class ChatService {
     personalization: PersonalizationInsightModel | undefined,
   ) {
     if (this.assistantAdapter === undefined) {
+      logger.warn(
+        { feature: "chat.reply.adapter_missing" },
+        "Gemini chat assistant adapter is not configured; using fallback assistant draft.",
+      );
       return createFallbackDraft(recipeCandidates);
     }
 
@@ -203,6 +207,13 @@ export class ChatService {
       });
 
       if (reply === null) {
+        logger.warn(
+          {
+            feature: "chat.reply.empty",
+            model: this.assistantAdapter.model,
+          },
+          "Gemini chat assistant returned no usable reply; using fallback assistant draft.",
+        );
         return createFallbackDraft(recipeCandidates, Date.now() - startedAt);
       }
 
