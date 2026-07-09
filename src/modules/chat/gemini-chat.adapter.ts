@@ -55,7 +55,6 @@ const geminiChatResponseSchema = {
     },
     recipeReferences: {
       type: "ARRAY",
-      maxItems: 5,
       items: {
         type: "OBJECT",
         properties: {
@@ -69,7 +68,6 @@ const geminiChatResponseSchema = {
     },
   },
   required: ["content", "recipeReferences"],
-  propertyOrdering: ["content", "recipeReferences"],
 } as const;
 
 const geminiGenerateContentResponseSchema = z.object({

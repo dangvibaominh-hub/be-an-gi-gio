@@ -20,7 +20,14 @@ const generatedStepSchema = z
     estimatedMinutes: z.number().int().min(0).max(240),
     techniqueIcon: techniqueIconSchema,
     isTricky: z.boolean().default(false),
-    timerSeconds: z.number().int().positive().max(86_400).nullable().default(null),
+    timerSeconds: z
+      .number()
+      .int()
+      .min(0)
+      .max(86_400)
+      .nullable()
+      .default(null)
+      .transform((value) => (value === 0 ? null : value)),
   })
   .strict();
 
@@ -73,8 +80,6 @@ export const geminiRecipeResponseSchema = {
     },
     ingredients: {
       type: "ARRAY",
-      minItems: 1,
-      maxItems: 30,
       items: {
         type: "OBJECT",
         properties: {
@@ -91,8 +96,6 @@ export const geminiRecipeResponseSchema = {
     },
     steps: {
       type: "ARRAY",
-      minItems: 2,
-      maxItems: 20,
       items: {
         type: "OBJECT",
         properties: {
@@ -105,7 +108,6 @@ export const geminiRecipeResponseSchema = {
           isTricky: { type: "BOOLEAN" },
           timerSeconds: {
             type: "INTEGER",
-            nullable: true,
           },
         },
         required: [
@@ -119,17 +121,6 @@ export const geminiRecipeResponseSchema = {
     },
   },
   required: [
-    "title",
-    "description",
-    "imageAlt",
-    "difficulty",
-    "cookTimeMinutes",
-    "baseServings",
-    "category",
-    "ingredients",
-    "steps",
-  ],
-  propertyOrdering: [
     "title",
     "description",
     "imageAlt",
