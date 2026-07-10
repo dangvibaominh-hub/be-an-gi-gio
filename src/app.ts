@@ -199,6 +199,7 @@ export function createApp(dependencies: AppDependencies = {}) {
       env.NODE_ENV,
       env.GEMINI_API_KEY,
       env.GEMINI_MODEL,
+      env.GEMINI_FALLBACK_MODELS,
       env.CHAT_AI_TIMEOUT_MS,
     );
   const chatService = new ChatService(
@@ -369,6 +370,7 @@ function createChatAssistantAdapter(
   nodeEnv: "development" | "test" | "production",
   apiKey: string | undefined,
   model: string | undefined,
+  fallbackModels: string | undefined,
   timeoutMs: number,
 ) {
   if (nodeEnv === "test" || apiKey === undefined || model === undefined) {
@@ -378,6 +380,18 @@ function createChatAssistantAdapter(
   return new GeminiChatAssistantAdapter({
     apiKey,
     model,
+    fallbackModels: parseGeminiFallbackModels(fallbackModels),
     timeoutMs,
   });
+}
+
+function parseGeminiFallbackModels(value: string | undefined) {
+  if (value === undefined) {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .map((model) => model.trim())
+    .filter((model) => model.length > 0);
 }

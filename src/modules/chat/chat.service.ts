@@ -222,7 +222,7 @@ export class ChatService {
       return {
         content: reply.content,
         recipeReferences,
-        model: this.assistantAdapter.model,
+        model: reply.model ?? this.assistantAdapter.model,
         latencyMs: Date.now() - startedAt,
         tokenCount: reply.tokenCount ?? null,
       };

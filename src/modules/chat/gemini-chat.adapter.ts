@@ -15,6 +15,7 @@ export interface ChatAssistantInput {
 export interface ChatAssistantReply {
   content: string;
   recipeReferences: { slug: string }[];
+  model?: string;
   tokenCount?: number;
 }
 
@@ -26,6 +27,7 @@ export interface ChatAssistantAdapter {
 interface GeminiChatAssistantAdapterOptions {
   apiKey: string;
   model: string;
+  fallbackModels?: string[];
   timeoutMs: number;
   fetchFn?: typeof fetch;
 }
@@ -75,11 +77,16 @@ export class GeminiChatAssistantAdapter implements ChatAssistantAdapter {
   readonly model: string;
   private readonly apiKey: string;
   private readonly fetchFn: typeof fetch;
+  private readonly models: string[];
   private readonly timeoutMs: number;
 
   constructor(options: GeminiChatAssistantAdapterOptions) {
     this.apiKey = options.apiKey;
     this.model = options.model;
+    this.models = uniqueModels([
+      options.model,
+      ...(options.fallbackModels ?? []),
+    ]);
     this.fetchFn = options.fetchFn ?? fetch;
     this.timeoutMs = options.timeoutMs;
   }
@@ -87,13 +94,36 @@ export class GeminiChatAssistantAdapter implements ChatAssistantAdapter {
   async generateReply(
     input: ChatAssistantInput,
   ): Promise<ChatAssistantReply | null> {
+    let lastError: unknown;
+
+    for (const model of this.models) {
+      try {
+        return await this.generateReplyWithModel(input, model);
+      } catch (error) {
+        lastError = error;
+
+        if (!isRetryableGeminiError(error) || model === this.models.at(-1)) {
+          throw error;
+        }
+      }
+    }
+
+    throw lastError instanceof Error
+      ? lastError
+      : new Error("Gemini chat request failed for all configured models.");
+  }
+
+  private async generateReplyWithModel(
+    input: ChatAssistantInput,
+    model: string,
+  ): Promise<ChatAssistantReply | null> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
       const response = await this.fetchFn(
         `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-          this.model,
+          model,
         )}:generateContent?key=${encodeURIComponent(this.apiKey)}`,
         {
           method: "POST",
@@ -114,39 +144,49 @@ export class GeminiChatAssistantAdapter implements ChatAssistantAdapter {
 
       if (!response.ok) {
         const preview = await readGeminiErrorPreview(response);
+        const message = [
+          `Gemini chat request failed for model ${model} with status ${response.status}`,
+          response.statusText.trim().length === 0 ? "" : ` ${response.statusText}`,
+          preview === null ? "" : `: ${preview}`,
+          ".",
+        ].join("");
 
-        throw new Error(
-          [
-            `Gemini chat request failed for model ${this.model} with status ${response.status}`,
-            response.statusText.trim().length === 0 ? "" : ` ${response.statusText}`,
-            preview === null ? "" : `: ${preview}`,
-            ".",
-          ].join(""),
-        );
+        throw new GeminiRequestError(response.status, model, message);
       }
 
       const payload = (await response.json()) as unknown;
       const directReply = chatAssistantReplySchema.safeParse(payload);
 
       if (directReply.success) {
-        return withTokenCount(directReply.data, payload);
+        return withTokenCount(directReply.data, payload, model);
       }
 
       const text = extractGeneratedText(payload);
 
       if (text === null) {
         throw new Error(
-          `Gemini chat response for model ${this.model} did not include generated text: ${previewPayload(
+          `Gemini chat response for model ${model} did not include generated text: ${previewPayload(
             payload,
           )}`,
         );
       }
 
       const reply = parseAssistantReplyText(text);
-      return withTokenCount(reply, payload);
+      return withTokenCount(reply, payload, model);
     } finally {
       clearTimeout(timeout);
     }
+  }
+}
+
+class GeminiRequestError extends Error {
+  constructor(
+    readonly status: number,
+    readonly model: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "GeminiRequestError";
   }
 }
 
@@ -220,13 +260,39 @@ function extractGeneratedText(payload: unknown) {
 function withTokenCount(
   reply: z.infer<typeof chatAssistantReplySchema>,
   payload: unknown,
+  model: string,
 ): ChatAssistantReply {
   const parsed = geminiGenerateContentResponseSchema.safeParse(payload);
   const tokenCount = parsed.success
     ? parsed.data.usageMetadata?.totalTokenCount
     : undefined;
 
-  return tokenCount === undefined ? reply : { ...reply, tokenCount };
+  return tokenCount === undefined
+    ? { ...reply, model }
+    : { ...reply, model, tokenCount };
+}
+
+function uniqueModels(models: string[]) {
+  const seen = new Set<string>();
+
+  return models.flatMap((model) => {
+    const normalized = model.trim();
+
+    if (normalized.length === 0 || seen.has(normalized)) {
+      return [];
+    }
+
+    seen.add(normalized);
+    return [normalized];
+  });
+}
+
+function isRetryableGeminiError(error: unknown) {
+  if (error instanceof GeminiRequestError) {
+    return [404, 408, 409, 429, 500, 502, 503, 504].includes(error.status);
+  }
+
+  return error instanceof Error && error.name === "AbortError";
 }
 
 function stripJsonFence(text: string) {

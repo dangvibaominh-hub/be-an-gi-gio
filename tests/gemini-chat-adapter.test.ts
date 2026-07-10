@@ -147,6 +147,76 @@ describe("GeminiChatAssistantAdapter", () => {
     });
   });
 
+  it("falls back to the next configured model on transient Gemini errors", async () => {
+    const requestedUrls: string[] = [];
+    let callCount = 0;
+    const fetchFn: typeof fetch = (input) => {
+      callCount += 1;
+      requestedUrls.push(readFetchUrl(input));
+
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: 503,
+                message: "This model is currently experiencing high demand.",
+                status: "UNAVAILABLE",
+              },
+            }),
+            { status: 503, statusText: "Service Unavailable" },
+          ),
+        );
+      }
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: JSON.stringify({
+                        content: "Phu Bep goi y nau trung ca chua.",
+                        recipeReferences: [{ slug: "trung-ca-chua" }],
+                      }),
+                    },
+                  ],
+                },
+              },
+            ],
+            usageMetadata: { totalTokenCount: 64 },
+          }),
+          { status: 200 },
+        ),
+      );
+    };
+    const adapter = new GeminiChatAssistantAdapter({
+      apiKey: "test-key",
+      model: "gemini-primary",
+      fallbackModels: ["gemini-fallback"],
+      timeoutMs: 10_000,
+      fetchFn,
+    });
+
+    const reply = await adapter.generateReply({
+      message: "Toi co trung va ca chua",
+      history: [],
+      recipeCandidates: [],
+      userContext: null,
+    });
+
+    expect(requestedUrls[0]).toContain("/gemini-primary:generateContent");
+    expect(requestedUrls[1]).toContain("/gemini-fallback:generateContent");
+    expect(reply).toMatchObject({
+      content: "Phu Bep goi y nau trung ca chua.",
+      model: "gemini-fallback",
+      recipeReferences: [{ slug: "trung-ca-chua" }],
+      tokenCount: 64,
+    });
+  });
+
   it("throws when Gemini returns no generated text", async () => {
     const fetchFn: typeof fetch = () =>
       Promise.resolve(
@@ -169,3 +239,15 @@ describe("GeminiChatAssistantAdapter", () => {
     ).rejects.toThrow("did not include generated text");
   });
 });
+
+function readFetchUrl(input: Parameters<typeof fetch>[0]) {
+  if (typeof input === "string") {
+    return input;
+  }
+
+  if (input instanceof URL) {
+    return input.toString();
+  }
+
+  return input.url;
+}
