@@ -18,14 +18,22 @@ function normalizeIngredient(value: string) {
 
 function getIngredientAliases(value: string) {
   const aliases: Record<string, string[]> = {
+    "banh trang bo bia": ["banh trang"],
+    "bong cai xanh": ["bong cai", "broccoli"],
     "bot banh xeo": ["banh xeo"],
+    "ca dieu hong": ["ca"],
     "ca loc": ["ca"],
     "ca nguyen con": ["ca"],
     "dau hu": ["dau phu"],
+    "dua": ["thom"],
     "gia vi co ban": ["nuoc mam", "duong", "tieu", "dau an"],
     "hai san": ["tom", "muc"],
+    "nam rom": ["nam"],
+    "nuoc tuong": ["xi dau"],
+    "thit bo": ["bo"],
     "nam va dau hu": ["nam", "dau hu", "dau phu"],
     "thit bo va bong cai": ["thit bo", "bong cai"],
+    "xuong ong bo": ["xuong ong"],
     "xuong ong va thit bo": ["xuong ong", "thit bo"],
   };
 
@@ -40,32 +48,7 @@ function getPrimaryTerm(techniqueIcon: string) {
 }
 
 function createIngredients(recipe: (typeof recipes)[number]) {
-  return [
-    {
-      name: "Hành tím",
-      amount: 2,
-      unit: "củ",
-      prepNote: "Hành tím: bóc vỏ, thái mỏng",
-    },
-    {
-      name: "Tỏi",
-      amount: 3,
-      unit: "tép",
-      prepNote: "Tỏi: bóc vỏ, băm nhỏ",
-    },
-    {
-      name: recipe.mainIngredient,
-      amount: recipe.baseAmount,
-      unit: recipe.unit,
-      prepNote: recipe.prepNote,
-    },
-    {
-      name: "Gia vị cơ bản",
-      amount: 1,
-      unit: "phần",
-      prepNote: "Chuẩn bị nước mắm, đường, tiêu và dầu ăn",
-    },
-  ];
+  return recipe.ingredients;
 }
 
 function createSteps(recipe: (typeof recipes)[number]) {

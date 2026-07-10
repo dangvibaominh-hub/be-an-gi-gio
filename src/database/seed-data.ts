@@ -40,6 +40,14 @@ interface RecipeSeed {
   unit: string;
   prepNote: string;
   techniqueIcon: TechniqueIcon;
+  ingredients: RecipeIngredientSeed[];
+}
+
+interface RecipeIngredientSeed {
+  name: string;
+  amount: number;
+  unit: string;
+  prepNote: string;
 }
 
 export const recipes: RecipeSeed[] = [
@@ -57,6 +65,16 @@ export const recipes: RecipeSeed[] = [
     unit: "g",
     prepNote: "Thịt bò thái mỏng, bông cải tách miếng vừa ăn",
     techniqueIcon: "chao",
+    ingredients: [
+      { name: "Thịt bò", amount: 300, unit: "g", prepNote: "Thái lát mỏng ngang thớ" },
+      { name: "Bông cải xanh", amount: 300, unit: "g", prepNote: "Tách miếng vừa ăn, chần sơ" },
+      { name: "Tỏi", amount: 3, unit: "tép", prepNote: "Băm nhỏ" },
+      { name: "Hành tím", amount: 1, unit: "củ", prepNote: "Thái mỏng" },
+      { name: "Dầu hào", amount: 1, unit: "muỗng canh", prepNote: "" },
+      { name: "Nước tương", amount: 1, unit: "muỗng canh", prepNote: "" },
+      { name: "Dầu ăn", amount: 2, unit: "muỗng canh", prepNote: "" },
+      { name: "Tiêu", amount: 0.5, unit: "muỗng cà phê", prepNote: "" },
+    ],
   },
   {
     slug: "rau-muong-xao-toi",
@@ -72,6 +90,13 @@ export const recipes: RecipeSeed[] = [
     unit: "g",
     prepNote: "Rau muống nhặt sạch, ngâm nước muối rồi để ráo",
     techniqueIcon: "chao",
+    ingredients: [
+      { name: "Rau muống", amount: 500, unit: "g", prepNote: "Nhặt sạch, cắt khúc" },
+      { name: "Tỏi", amount: 4, unit: "tép", prepNote: "Băm nhỏ" },
+      { name: "Dầu ăn", amount: 2, unit: "muỗng canh", prepNote: "" },
+      { name: "Nước mắm", amount: 1, unit: "muỗng canh", prepNote: "" },
+      { name: "Đường", amount: 0.5, unit: "muỗng cà phê", prepNote: "" },
+    ],
   },
   {
     slug: "suon-xao-chua-ngot",
@@ -87,6 +112,16 @@ export const recipes: RecipeSeed[] = [
     unit: "g",
     prepNote: "Sườn chặt miếng, chần nhanh rồi rửa sạch",
     techniqueIcon: "chao",
+    ingredients: [
+      { name: "Sườn non", amount: 600, unit: "g", prepNote: "Chặt miếng, chần nhanh rồi rửa sạch" },
+      { name: "Hành tím", amount: 2, unit: "củ", prepNote: "Băm nhỏ" },
+      { name: "Tỏi", amount: 3, unit: "tép", prepNote: "Băm nhỏ" },
+      { name: "Nước mắm", amount: 2, unit: "muỗng canh", prepNote: "" },
+      { name: "Đường", amount: 2, unit: "muỗng canh", prepNote: "" },
+      { name: "Giấm", amount: 1, unit: "muỗng canh", prepNote: "" },
+      { name: "Tương cà", amount: 2, unit: "muỗng canh", prepNote: "" },
+      { name: "Dầu ăn", amount: 2, unit: "muỗng canh", prepNote: "" },
+    ],
   },
   {
     slug: "canh-chua-ca-loc",
@@ -102,6 +137,19 @@ export const recipes: RecipeSeed[] = [
     unit: "g",
     prepNote: "Cá làm sạch, cắt khoanh và để ráo",
     techniqueIcon: "noi",
+    ingredients: [
+      { name: "Cá lóc", amount: 700, unit: "g", prepNote: "Làm sạch, cắt khoanh" },
+      { name: "Dứa", amount: 150, unit: "g", prepNote: "Cắt lát" },
+      { name: "Cà chua", amount: 2, unit: "quả", prepNote: "Cắt múi cau" },
+      { name: "Bạc hà", amount: 150, unit: "g", prepNote: "Tước vỏ, cắt lát xéo" },
+      { name: "Đậu bắp", amount: 100, unit: "g", prepNote: "Cắt xéo" },
+      { name: "Giá đỗ", amount: 100, unit: "g", prepNote: "Rửa sạch" },
+      { name: "Me chua", amount: 40, unit: "g", prepNote: "Dầm lấy nước cốt" },
+      { name: "Rau om", amount: 1, unit: "nhánh", prepNote: "Cắt nhỏ" },
+      { name: "Ngò gai", amount: 2, unit: "lá", prepNote: "Cắt nhỏ" },
+      { name: "Nước mắm", amount: 2, unit: "muỗng canh", prepNote: "" },
+      { name: "Đường", amount: 1, unit: "muỗng canh", prepNote: "" },
+    ],
   },
   {
     slug: "chao-ga-xe-phay",
@@ -117,6 +165,16 @@ export const recipes: RecipeSeed[] = [
     unit: "g",
     prepNote: "Gà rửa sạch, luộc chín rồi xé sợi",
     techniqueIcon: "noi",
+    ingredients: [
+      { name: "Thịt gà", amount: 400, unit: "g", prepNote: "Rửa sạch, luộc chín rồi xé sợi" },
+      { name: "Gạo tẻ", amount: 150, unit: "g", prepNote: "Vo sạch, rang sơ nếu thích" },
+      { name: "Hành tím", amount: 2, unit: "củ", prepNote: "Băm nhỏ" },
+      { name: "Gừng", amount: 20, unit: "g", prepNote: "Thái lát" },
+      { name: "Hành lá", amount: 2, unit: "nhánh", prepNote: "Cắt nhỏ" },
+      { name: "Rau răm", amount: 1, unit: "nhánh", prepNote: "Cắt nhỏ" },
+      { name: "Nước mắm", amount: 1, unit: "muỗng canh", prepNote: "" },
+      { name: "Muối", amount: 1, unit: "muỗng cà phê", prepNote: "" },
+    ],
   },
   {
     slug: "cha-gio-hai-san",
@@ -132,6 +190,17 @@ export const recipes: RecipeSeed[] = [
     unit: "g",
     prepNote: "Tôm mực làm sạch, thái hạt lựu và để ráo",
     techniqueIcon: "chao",
+    ingredients: [
+      { name: "Tôm", amount: 200, unit: "g", prepNote: "Bóc vỏ, băm thô" },
+      { name: "Mực", amount: 150, unit: "g", prepNote: "Làm sạch, thái hạt lựu" },
+      { name: "Khoai môn", amount: 100, unit: "g", prepNote: "Bào sợi" },
+      { name: "Cà rốt", amount: 1, unit: "củ", prepNote: "Bào sợi" },
+      { name: "Bánh tráng bò bía", amount: 20, unit: "cái", prepNote: "" },
+      { name: "Hành tím", amount: 2, unit: "củ", prepNote: "Băm nhỏ" },
+      { name: "Tỏi", amount: 2, unit: "tép", prepNote: "Băm nhỏ" },
+      { name: "Trứng gà", amount: 1, unit: "quả", prepNote: "Đánh tan để quét mép cuốn" },
+      { name: "Dầu ăn", amount: 400, unit: "ml", prepNote: "Để chiên ngập dầu" },
+    ],
   },
   {
     slug: "banh-xeo-mien-tay",
@@ -147,6 +216,17 @@ export const recipes: RecipeSeed[] = [
     unit: "g",
     prepNote: "Pha bột với nước theo tỷ lệ, để nghỉ 15 phút",
     techniqueIcon: "chao",
+    ingredients: [
+      { name: "Bột bánh xèo", amount: 300, unit: "g", prepNote: "Pha theo hướng dẫn gói bột" },
+      { name: "Nước cốt dừa", amount: 200, unit: "ml", prepNote: "" },
+      { name: "Bia", amount: 100, unit: "ml", prepNote: "Giúp vỏ bánh giòn hơn" },
+      { name: "Tôm", amount: 200, unit: "g", prepNote: "Rửa sạch" },
+      { name: "Thịt ba chỉ", amount: 200, unit: "g", prepNote: "Thái mỏng" },
+      { name: "Giá đỗ", amount: 200, unit: "g", prepNote: "Rửa sạch" },
+      { name: "Hành lá", amount: 3, unit: "nhánh", prepNote: "Cắt nhỏ" },
+      { name: "Rau sống", amount: 1, unit: "rổ", prepNote: "Rửa sạch, để ráo" },
+      { name: "Dầu ăn", amount: 4, unit: "muỗng canh", prepNote: "" },
+    ],
   },
   {
     slug: "ca-hap-gung",
@@ -162,6 +242,15 @@ export const recipes: RecipeSeed[] = [
     unit: "con",
     prepNote: "Cá làm sạch, khứa nhẹ hai mặt và thấm khô",
     techniqueIcon: "hap",
+    ingredients: [
+      { name: "Cá diêu hồng", amount: 1, unit: "con", prepNote: "Làm sạch, khứa nhẹ hai mặt" },
+      { name: "Gừng", amount: 50, unit: "g", prepNote: "Thái sợi" },
+      { name: "Hành lá", amount: 4, unit: "nhánh", prepNote: "Cắt khúc" },
+      { name: "Hành tây", amount: 1, unit: "củ", prepNote: "Cắt múi cau" },
+      { name: "Nước tương", amount: 2, unit: "muỗng canh", prepNote: "" },
+      { name: "Dầu hào", amount: 1, unit: "muỗng canh", prepNote: "" },
+      { name: "Dầu ăn", amount: 1, unit: "muỗng canh", prepNote: "Để phi hành" },
+    ],
   },
   {
     slug: "nam-xao-dau-hu-chay",
@@ -177,6 +266,16 @@ export const recipes: RecipeSeed[] = [
     unit: "g",
     prepNote: "Nấm lau sạch, đậu hũ cắt miếng vuông",
     techniqueIcon: "chao",
+    ingredients: [
+      { name: "Nấm rơm", amount: 200, unit: "g", prepNote: "Lau sạch, cắt đôi" },
+      { name: "Đậu hũ", amount: 2, unit: "miếng", prepNote: "Cắt miếng vuông" },
+      { name: "Ớt chuông", amount: 1, unit: "quả", prepNote: "Cắt miếng vừa ăn" },
+      { name: "Tỏi", amount: 2, unit: "tép", prepNote: "Băm nhỏ" },
+      { name: "Hành boa rô", amount: 1, unit: "nhánh", prepNote: "Thái lát" },
+      { name: "Nước tương", amount: 1, unit: "muỗng canh", prepNote: "" },
+      { name: "Dầu hào chay", amount: 1, unit: "muỗng canh", prepNote: "" },
+      { name: "Dầu ăn", amount: 2, unit: "muỗng canh", prepNote: "" },
+    ],
   },
   {
     slug: "pho-bo-gia-truyen",
@@ -192,5 +291,20 @@ export const recipes: RecipeSeed[] = [
     unit: "g",
     prepNote: "Xương chần sạch, thịt bò thái lát mỏng ngang thớ",
     techniqueIcon: "noi",
+    ingredients: [
+      { name: "Xương ống bò", amount: 1000, unit: "g", prepNote: "Chần sạch trước khi hầm" },
+      { name: "Thịt bò", amount: 500, unit: "g", prepNote: "Thái lát mỏng ngang thớ" },
+      { name: "Bánh phở", amount: 600, unit: "g", prepNote: "Trụng nóng trước khi ăn" },
+      { name: "Hành tây", amount: 1, unit: "củ", prepNote: "Nướng sơ" },
+      { name: "Gừng", amount: 50, unit: "g", prepNote: "Nướng sơ, đập dập" },
+      { name: "Hoa hồi", amount: 3, unit: "cái", prepNote: "Rang thơm" },
+      { name: "Quế", amount: 1, unit: "thanh", prepNote: "Rang thơm" },
+      { name: "Thảo quả", amount: 1, unit: "quả", prepNote: "Rang thơm" },
+      { name: "Đinh hương", amount: 5, unit: "nụ", prepNote: "Rang thơm" },
+      { name: "Nước mắm", amount: 3, unit: "muỗng canh", prepNote: "" },
+      { name: "Đường phèn", amount: 20, unit: "g", prepNote: "" },
+      { name: "Hành lá", amount: 3, unit: "nhánh", prepNote: "Cắt nhỏ" },
+      { name: "Rau thơm", amount: 1, unit: "rổ", prepNote: "Rửa sạch, để ráo" },
+    ],
   },
 ];
