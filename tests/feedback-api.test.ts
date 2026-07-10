@@ -158,6 +158,7 @@ class InMemoryFeedbackRepository implements FeedbackRepository {
       {
         id: completedSessionId,
         recipeId: "recipe-1",
+        recipeCategory: "Món xào",
         status: "COMPLETED",
       },
     ],
@@ -166,6 +167,7 @@ class InMemoryFeedbackRepository implements FeedbackRepository {
       {
         id: inProgressSessionId,
         recipeId: "recipe-1",
+        recipeCategory: "Món xào",
         status: "IN_PROGRESS",
       },
     ],
@@ -311,6 +313,49 @@ describe("Feedback API", () => {
     expect(response.status).toBe(409);
     const body = response.body as { error: { code: string } };
     expect(body.error.code).toBe("COOKING_SESSION_NOT_COMPLETED");
+  });
+
+  it("accepts only feedback tags that fit the recipe category", async () => {
+    const app = createTestApp();
+    const accessToken = await register(app);
+
+    const acceptedResponse = await request(app)
+      .post(`/api/v1/cooking-sessions/${completedSessionId}/feedback`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({
+        rating: 4,
+        issues: ["pan-sticking-or-burning", "too-oily"],
+      });
+
+    expect(acceptedResponse.status).toBe(201);
+    expect(acceptedResponse.body).toMatchObject({
+      data: {
+        issues: ["pan-sticking-or-burning", "too-oily"],
+      },
+      meta: {
+        personalization: {
+          issueCounts: {
+            "pan-sticking-or-burning": 1,
+            "too-oily": 1,
+          },
+        },
+      },
+    });
+
+    const rejectedResponse = await request(app)
+      .post(`/api/v1/cooking-sessions/${completedSessionId}/feedback`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .send({
+        rating: 4,
+        issues: ["soup-too-bland-or-salty"],
+      });
+
+    expect(rejectedResponse.status).toBe(400);
+    expect(rejectedResponse.body).toMatchObject({
+      error: {
+        code: "FEEDBACK_ISSUE_NOT_ALLOWED_FOR_RECIPE",
+      },
+    });
   });
 
   it("requires authentication and validates rating", async () => {

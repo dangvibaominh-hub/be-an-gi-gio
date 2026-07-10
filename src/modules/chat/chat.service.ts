@@ -10,7 +10,10 @@ import type {
   ChatAssistantAdapter,
   ChatAssistantReply,
 } from "./gemini-chat.adapter.js";
-import type { PersonalizationInsightModel } from "../feedback/feedback.model.js";
+import type {
+  FeedbackIssue,
+  PersonalizationInsightModel,
+} from "../feedback/feedback.model.js";
 import type {
   PersonalizationRepository,
 } from "../feedback/feedback.repository.js";
@@ -430,6 +433,31 @@ function buildPersonalizationContext(
     )}%.`,
   ];
   const { issueCounts, signals } = personalization;
+  const easyIssueCount = sumPersonalizationIssueCounts(issueCounts, [
+    "cutting-meat-hard",
+    "hard-to-follow-steps",
+    "pan-sticking-or-burning",
+    "steamed-unevenly",
+    "texture-failed",
+    "temperature-control-hard",
+  ]);
+  const ingredientFitIssueCount = sumPersonalizationIssueCounts(issueCounts, [
+    "missing-ingredients",
+    "lacks-protein",
+  ]);
+  const techniqueIssueCount = sumPersonalizationIssueCounts(issueCounts, [
+    "oil-splatter",
+    "too-oily",
+    "not-crispy",
+    "vegetables-too-soft",
+    "soup-too-bland-or-salty",
+    "ingredients-overcooked",
+    "fishy-smell",
+    "too-dry",
+    "too-sweet",
+    "taste-not-right",
+    "bland-flavor",
+  ]);
 
   if (signals.preferQuickRecipes > 0) {
     lines.push(
@@ -439,19 +467,19 @@ function buildPersonalizationContext(
 
   if (signals.preferEasyRecipes > 0) {
     lines.push(
-      `Nguoi dung tung gap kho khi so che/thao tac (${issueCounts["cutting-meat-hard"]} lan); uu tien mon de lam va huong dan ro tung buoc.`,
+      `Nguoi dung tung gap kho khi thao tac cong thuc (${easyIssueCount} lan); uu tien mon de lam va huong dan ro tung buoc.`,
     );
   }
 
   if (signals.preferIngredientFit > 0) {
     lines.push(
-      `Nguoi dung hay bi thieu nguyen lieu (${issueCounts["missing-ingredients"]} lan); uu tien cong thuc khop nguyen lieu va goi y cach thay the.`,
+      `Nguoi dung hay gap van de ve nguyen lieu/do no (${ingredientFitIssueCount} lan); uu tien cong thuc khop nguyen lieu va goi y cach thay the.`,
     );
   }
 
   if (signals.preferTechniqueGuidance > 0) {
     lines.push(
-      `Nguoi dung tung gap van de ban dau (${issueCounts["oil-splatter"]} lan); khi phu hop hay nhac meo giam ban dau va thao tac an toan.`,
+      `Nguoi dung tung gap van de ve ky thuat, do chin hoac can vi (${techniqueIssueCount} lan); khi phu hop hay them meo thao tac va canh vi ro rang.`,
     );
   }
 
@@ -460,6 +488,13 @@ function buildPersonalizationContext(
   }
 
   return lines.join("\n");
+}
+
+function sumPersonalizationIssueCounts(
+  issueCounts: PersonalizationInsightModel["issueCounts"],
+  issues: readonly FeedbackIssue[],
+) {
+  return issues.reduce((sum, issue) => sum + issueCounts[issue], 0);
 }
 
 function createFallbackDraft(

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { RECIPE_CATEGORIES } from "../src/modules/recipes/recipe.model.js";
+import { emptyFeedbackIssueCounts } from "../src/modules/feedback/feedback.model.js";
 import type { RecipeGenerationAdapter } from "../src/modules/recommendations/gemini-recipe.adapter.js";
 import type { PersonalizationRepository } from "../src/modules/feedback/feedback.repository.js";
 import type { RecommendationRepository } from "../src/modules/recommendations/recommendation.repository.js";
@@ -315,6 +316,7 @@ describe("RecommendationService", () => {
             preferTechniqueGuidance: 0.08,
           },
           issueCounts: {
+            ...emptyFeedbackIssueCounts(),
             "cutting-meat-hard": 5,
             "oil-splatter": 5,
             "took-longer-than-expected": 5,

@@ -1,9 +1,11 @@
 import type { Pool } from "pg";
 
 import type { CookingSessionStatus } from "../cooking-sessions/cooking-session.model.js";
+import type { RecipeCategory } from "../recipes/recipe.model.js";
 import type {
   CookingFeedbackModel,
   FeedbackIssue,
+  FeedbackIssueCounts,
   FeedbackSessionRecord,
   FeedbackSignal,
   PersonalizationInsightModel,
@@ -12,11 +14,15 @@ import {
   buildInsightMessages,
 } from "./personalization-rules.js";
 import type { SubmitFeedbackInput } from "./feedback.types.js";
-import { emptyPersonalizationInsight } from "./feedback.model.js";
+import {
+  emptyFeedbackIssueCounts,
+  emptyPersonalizationInsight,
+} from "./feedback.model.js";
 
 interface FeedbackSessionRow {
   id: string;
   recipe_id: string;
+  category_name: RecipeCategory;
   status: CookingSessionStatus;
 }
 
@@ -48,6 +54,7 @@ interface PersonalizationRow {
   oil_splatter_count: number;
   took_longer_than_expected_count: number;
   missing_ingredients_count: number;
+  issue_counts: Record<string, unknown> | null;
   updated_at: Date;
 }
 
@@ -77,10 +84,16 @@ export class PostgresFeedbackRepository implements FeedbackRepository {
 
   async findSessionForFeedback(userId: string, cookingSessionId: string) {
     const result = await this.database.query<FeedbackSessionRow>(
-      `SELECT id, recipe_id, status
-       FROM cooking_sessions
-       WHERE user_id = $1
-         AND id = $2
+      `SELECT
+         cs.id,
+         cs.recipe_id,
+         cs.status,
+         c.name AS category_name
+       FROM cooking_sessions cs
+       JOIN recipes r ON r.id = cs.recipe_id
+       JOIN categories c ON c.id = r.category_id
+       WHERE cs.user_id = $1
+         AND cs.id = $2
        LIMIT 1`,
       [userId, cookingSessionId],
     );
@@ -93,6 +106,7 @@ export class PostgresFeedbackRepository implements FeedbackRepository {
     return {
       id: session.id,
       recipeId: session.recipe_id,
+      recipeCategory: session.category_name,
       status: session.status,
     };
   }
@@ -174,9 +188,10 @@ export class PostgresFeedbackRepository implements FeedbackRepository {
          oil_splatter_count,
          took_longer_than_expected_count,
          missing_ingredients_count,
+         issue_counts,
          updated_at
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, NOW())
        ON CONFLICT (user_id) DO UPDATE SET
          feedback_count = EXCLUDED.feedback_count,
          average_rating = EXCLUDED.average_rating,
@@ -189,6 +204,7 @@ export class PostgresFeedbackRepository implements FeedbackRepository {
          oil_splatter_count = EXCLUDED.oil_splatter_count,
          took_longer_than_expected_count = EXCLUDED.took_longer_than_expected_count,
          missing_ingredients_count = EXCLUDED.missing_ingredients_count,
+         issue_counts = EXCLUDED.issue_counts,
          updated_at = NOW()
        RETURNING ${personalizationColumns}`,
       [
@@ -204,6 +220,7 @@ export class PostgresFeedbackRepository implements FeedbackRepository {
         insight.issueCounts["oil-splatter"],
         insight.issueCounts["took-longer-than-expected"],
         insight.issueCounts["missing-ingredients"],
+        JSON.stringify(insight.issueCounts),
       ],
     );
     const savedInsight = result.rows[0];
@@ -243,6 +260,7 @@ const personalizationColumns = `
   oil_splatter_count,
   took_longer_than_expected_count,
   missing_ingredients_count,
+  issue_counts,
   updated_at
 `;
 
@@ -262,12 +280,7 @@ function mapFeedbackRow(row: FeedbackRow): CookingFeedbackModel {
 function mapPersonalizationRow(
   row: PersonalizationRow,
 ): PersonalizationInsightModel {
-  const issueCounts = {
-    "cutting-meat-hard": row.cutting_meat_hard_count,
-    "oil-splatter": row.oil_splatter_count,
-    "took-longer-than-expected": row.took_longer_than_expected_count,
-    "missing-ingredients": row.missing_ingredients_count,
-  };
+  const issueCounts = normalizeStoredIssueCounts(row);
 
   return {
     feedbackCount: row.feedback_count,
@@ -283,4 +296,27 @@ function mapPersonalizationRow(
     insights: buildInsightMessages(issueCounts),
     updatedAt: row.updated_at.toISOString(),
   };
+}
+
+function normalizeStoredIssueCounts(row: PersonalizationRow) {
+  const issueCounts = emptyFeedbackIssueCounts();
+  const storedIssueCounts = row.issue_counts ?? {};
+
+  for (const [issue, count] of Object.entries(storedIssueCounts)) {
+    if (issue in issueCounts && typeof count === "number" && count >= 0) {
+      issueCounts[issue as FeedbackIssue] = count;
+    }
+  }
+
+  if (Object.values(issueCounts).some((count) => count > 0)) {
+    return issueCounts;
+  }
+
+  return {
+    ...issueCounts,
+    "cutting-meat-hard": row.cutting_meat_hard_count,
+    "oil-splatter": row.oil_splatter_count,
+    "took-longer-than-expected": row.took_longer_than_expected_count,
+    "missing-ingredients": row.missing_ingredients_count,
+  } satisfies FeedbackIssueCounts;
 }
