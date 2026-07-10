@@ -147,6 +147,56 @@ describe("GeminiChatAssistantAdapter", () => {
     });
   });
 
+  it("accepts recipe references returned as slug strings", async () => {
+    const fetchFn: typeof fetch = () =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: JSON.stringify({
+                        content:
+                          "Chao ban, Phu Bep goi y bo xao hanh tay va ca hap gung.",
+                        recipeReferences: [
+                          "bo-xao-hanh-tay",
+                          "ca-hap-gung",
+                        ],
+                      }),
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      );
+    const adapter = new GeminiChatAssistantAdapter({
+      apiKey: "test-key",
+      model: "gemini-test",
+      timeoutMs: 10_000,
+      fetchFn,
+    });
+
+    const reply = await adapter.generateReply({
+      message: "Duoi 30 phut",
+      history: [],
+      recipeCandidates: [],
+      userContext: null,
+    });
+
+    expect(reply).toMatchObject({
+      content: "Chao ban, Phu Bep goi y bo xao hanh tay va ca hap gung.",
+      recipeReferences: [
+        { slug: "bo-xao-hanh-tay" },
+        { slug: "ca-hap-gung" },
+      ],
+    });
+  });
+
   it("falls back to the next configured model on transient Gemini errors", async () => {
     const requestedUrls: string[] = [];
     let callCount = 0;

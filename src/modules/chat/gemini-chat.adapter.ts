@@ -41,9 +41,15 @@ const chatAssistantReplySchema = z
       .transform((value) => value.slice(0, 2_000)),
     recipeReferences: z
       .array(
-        z.object({
-          slug: z.string().trim().min(1).max(180),
-        }),
+        z.union([
+          z.string().trim().min(1).max(180).transform((slug) => ({ slug })),
+          z
+            .object({
+              slug: z.string().trim().min(1).max(180),
+            })
+            .passthrough()
+            .transform(({ slug }) => ({ slug })),
+        ]),
       )
       .default([])
       .transform((value) => value.slice(0, 5)),
@@ -224,6 +230,7 @@ function buildGeminiContents(input: ChatAssistantInput) {
             "Nếu có tín hiệu cá nhân hóa, dùng như gợi ý mềm; câu hỏi hiện tại của người dùng vẫn là ưu tiên cao nhất.",
             "Nếu cần gợi ý công thức, chỉ reference slug nằm trong Recipe context.",
             "Trả về duy nhất JSON object theo schema: content và recipeReferences.",
+            "recipeReferences phải là mảng object dạng [{\"slug\":\"slug-cong-thuc\"}], không trả mảng string.",
             "",
             "User personalization context:",
             userContext,
