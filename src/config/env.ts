@@ -37,7 +37,7 @@ const envSchema = z.object({
   RECOMMENDATION_MATCH_THRESHOLD: z.coerce.number().min(0).max(1).default(0.55),
   GEMINI_API_KEY: z.string().min(1).optional(),
   GEMINI_MODEL: z.string().min(1).optional(),
-  CHAT_AI_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
+  CHAT_AI_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   CHAT_MESSAGE_RATE_LIMIT_PER_MINUTE: z.coerce
     .number()
     .int()

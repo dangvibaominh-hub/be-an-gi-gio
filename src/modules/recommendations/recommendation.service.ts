@@ -1,10 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { logger } from "../../config/logger.js";
-import {
-  normalizeIngredientName,
-  tokenizeIngredientName,
-} from "./ingredient-normalizer.js";
+import { normalizeIngredientName } from "./ingredient-normalizer.js";
 import type {
   GeneratedRecipeRepository,
   RecommendationCandidate,
@@ -28,7 +25,6 @@ import type {
 interface NormalizedInput {
   original: string;
   normalized: string;
-  tokens: string[];
 }
 
 export class RecommendationService {
@@ -48,7 +44,6 @@ export class RecommendationService {
     const inputs = query.ingredients.map((ingredient) => ({
       original: ingredient,
       normalized: normalizeIngredientName(ingredient),
-      tokens: tokenizeIngredientName(ingredient),
     }));
     const savedRecipeSlugs =
       userId === undefined || this.savedRecipeRepository === undefined
@@ -278,27 +273,7 @@ function ingredientMatchesInput(
 }
 
 function normalizedValuesMatch(value: string, input: NormalizedInput) {
-  const normalizedValue = normalizeIngredientName(value);
-
-  if (normalizedValue === input.normalized) {
-    return true;
-  }
-
-  const valueTokens = tokenizeIngredientName(normalizedValue);
-
-  return (
-    isTokenSubset(input.tokens, valueTokens) ||
-    isTokenSubset(valueTokens, input.tokens)
-  );
-}
-
-function isTokenSubset(left: string[], right: string[]) {
-  if (left.length === 0 || right.length === 0) {
-    return false;
-  }
-
-  const rightTokens = new Set(right);
-  return left.every((token) => rightTokens.has(token));
+  return normalizeIngredientName(value) === input.normalized;
 }
 
 function roundScore(value: number) {
