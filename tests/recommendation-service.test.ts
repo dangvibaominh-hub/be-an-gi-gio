@@ -118,6 +118,137 @@ describe("RecommendationService", () => {
     expect(geminiCalled).toBe(false);
   });
 
+  it("matches ingredients by exact normalized name or alias only", async () => {
+    const fishRepository: RecommendationRepository = {
+      listCandidates() {
+        return Promise.resolve([
+          {
+            id: "recipe-fish",
+            slug: "ca-hap",
+            title: "Ca Hap",
+            description: "Mon ca hap don gian.",
+            image: "/images/recipes/ca-hap.png",
+            imageAlt: "Ca hap",
+            difficulty: "de",
+            cookTimeMinutes: 20,
+            baseServings: 2,
+            category: RECIPE_CATEGORIES[3],
+            ingredients: [
+              {
+                id: "ingredient-fish",
+                name: "Ca",
+                normalizedName: "ca",
+                aliases: [],
+              },
+            ],
+          },
+          {
+            id: "recipe-snakehead",
+            slug: "ca-loc-hap",
+            title: "Ca Loc Hap",
+            description: "Mon ca loc hap.",
+            image: "/images/recipes/ca-loc-hap.png",
+            imageAlt: "Ca loc hap",
+            difficulty: "de",
+            cookTimeMinutes: 25,
+            baseServings: 2,
+            category: RECIPE_CATEGORIES[3],
+            ingredients: [
+              {
+                id: "ingredient-snakehead",
+                name: "Ca loc",
+                normalizedName: "ca loc",
+                aliases: ["ca qua"],
+              },
+            ],
+          },
+          {
+            id: "recipe-shark",
+            slug: "ca-map-nuong",
+            title: "Ca Map Nuong",
+            description: "Mon ca map nuong.",
+            image: "/images/recipes/ca-map-nuong.png",
+            imageAlt: "Ca map nuong",
+            difficulty: "trung-binh",
+            cookTimeMinutes: 35,
+            baseServings: 3,
+            category: RECIPE_CATEGORIES[3],
+            ingredients: [
+              {
+                id: "ingredient-shark",
+                name: "Ca map",
+                normalizedName: "ca map",
+                aliases: [],
+              },
+            ],
+          },
+          {
+            id: "recipe-crocodile",
+            slug: "thit-ca-sau-nuong",
+            title: "Thit Ca Sau Nuong",
+            description: "Mon thit ca sau nuong.",
+            image: "/images/recipes/thit-ca-sau-nuong.png",
+            imageAlt: "Thit ca sau nuong",
+            difficulty: "trung-binh",
+            cookTimeMinutes: 35,
+            baseServings: 3,
+            category: RECIPE_CATEGORIES[3],
+            ingredients: [
+              {
+                id: "ingredient-crocodile",
+                name: "Ca sau",
+                normalizedName: "ca sau",
+                aliases: [],
+              },
+            ],
+          },
+        ]);
+      },
+    };
+    const service = new RecommendationService(fishRepository, 0.55);
+
+    const genericFishResult = await service.recommend({
+      ingredients: ["ca"],
+      filters: {},
+      page: 1,
+      limit: 12,
+    });
+    const snakeheadResult = await service.recommend({
+      ingredients: ["ca loc"],
+      filters: {},
+      page: 1,
+      limit: 12,
+    });
+    const snakeheadAliasResult = await service.recommend({
+      ingredients: ["ca qua"],
+      filters: {},
+      page: 1,
+      limit: 12,
+    });
+    const sharkResult = await service.recommend({
+      ingredients: ["ca map"],
+      filters: {},
+      page: 1,
+      limit: 12,
+    });
+    const crocodileResult = await service.recommend({
+      ingredients: ["ca sau"],
+      filters: {},
+      page: 1,
+      limit: 12,
+    });
+
+    expect(genericFishResult.items.map((item) => item.slug)).toEqual(["ca-hap"]);
+    expect(snakeheadResult.items.map((item) => item.slug)).toEqual(["ca-loc-hap"]);
+    expect(snakeheadAliasResult.items.map((item) => item.slug)).toEqual([
+      "ca-loc-hap",
+    ]);
+    expect(sharkResult.items.map((item) => item.slug)).toEqual(["ca-map-nuong"]);
+    expect(crocodileResult.items.map((item) => item.slug)).toEqual([
+      "thit-ca-sau-nuong",
+    ]);
+  });
+
   it("reranks recommendations with personalization preferences", async () => {
     const personalizedRepository: RecommendationRepository = {
       listCandidates() {
