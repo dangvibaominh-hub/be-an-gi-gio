@@ -29,6 +29,7 @@ import type {
 } from "../src/modules/chat/gemini-chat.adapter.js";
 import type { SendChatMessageResult } from "../src/modules/chat/chat.types.js";
 import {
+  emptyFeedbackIssueCounts,
   emptyPersonalizationInsight,
   type PersonalizationInsightModel,
 } from "../src/modules/feedback/feedback.model.js";
@@ -495,6 +496,7 @@ describe("Chat API", () => {
               preferTechniqueGuidance: 0,
             },
             issueCounts: {
+              ...emptyFeedbackIssueCounts(),
               "cutting-meat-hard": 2,
               "oil-splatter": 0,
               "took-longer-than-expected": 3,

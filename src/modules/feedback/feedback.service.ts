@@ -3,6 +3,7 @@ import type {
   CookingFeedbackModel,
   PersonalizationInsightModel,
 } from "./feedback.model.js";
+import { isFeedbackIssueAllowedForCategory } from "./feedback.model.js";
 import type { FeedbackRepository } from "./feedback.repository.js";
 import type { SubmitFeedbackInput } from "./feedback.types.js";
 import { buildPersonalizationInsight } from "./personalization-rules.js";
@@ -38,6 +39,18 @@ export class FeedbackService {
         409,
         "COOKING_SESSION_NOT_COMPLETED",
         "Chi co the gui feedback sau khi hoan thanh phien nau.",
+      );
+    }
+
+    const invalidIssue = input.issues.find(
+      (issue) =>
+        !isFeedbackIssueAllowedForCategory(issue, session.recipeCategory),
+    );
+    if (invalidIssue !== undefined) {
+      throw new AppError(
+        400,
+        "FEEDBACK_ISSUE_NOT_ALLOWED_FOR_RECIPE",
+        "Tag feedback nay khong phu hop voi loai mon da nau.",
       );
     }
 

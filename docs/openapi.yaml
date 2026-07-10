@@ -1293,9 +1293,25 @@ components:
       type: string
       enum:
         - cutting-meat-hard
+        - hard-to-follow-steps
+        - taste-not-right
         - oil-splatter
         - took-longer-than-expected
         - missing-ingredients
+        - too-oily
+        - not-crispy
+        - pan-sticking-or-burning
+        - vegetables-too-soft
+        - soup-too-bland-or-salty
+        - ingredients-overcooked
+        - steamed-unevenly
+        - fishy-smell
+        - too-dry
+        - too-sweet
+        - texture-failed
+        - temperature-control-hard
+        - bland-flavor
+        - lacks-protein
     SubmitFeedbackRequest:
       type: object
       required: [rating]
@@ -1396,11 +1412,33 @@ components:
       type: object
       required:
         - cutting-meat-hard
+        - hard-to-follow-steps
+        - taste-not-right
         - oil-splatter
         - took-longer-than-expected
         - missing-ingredients
+        - too-oily
+        - not-crispy
+        - pan-sticking-or-burning
+        - vegetables-too-soft
+        - soup-too-bland-or-salty
+        - ingredients-overcooked
+        - steamed-unevenly
+        - fishy-smell
+        - too-dry
+        - too-sweet
+        - texture-failed
+        - temperature-control-hard
+        - bland-flavor
+        - lacks-protein
       properties:
         cutting-meat-hard:
+          type: integer
+          minimum: 0
+        hard-to-follow-steps:
+          type: integer
+          minimum: 0
+        taste-not-right:
           type: integer
           minimum: 0
         oil-splatter:
@@ -1410,6 +1448,48 @@ components:
           type: integer
           minimum: 0
         missing-ingredients:
+          type: integer
+          minimum: 0
+        too-oily:
+          type: integer
+          minimum: 0
+        not-crispy:
+          type: integer
+          minimum: 0
+        pan-sticking-or-burning:
+          type: integer
+          minimum: 0
+        vegetables-too-soft:
+          type: integer
+          minimum: 0
+        soup-too-bland-or-salty:
+          type: integer
+          minimum: 0
+        ingredients-overcooked:
+          type: integer
+          minimum: 0
+        steamed-unevenly:
+          type: integer
+          minimum: 0
+        fishy-smell:
+          type: integer
+          minimum: 0
+        too-dry:
+          type: integer
+          minimum: 0
+        too-sweet:
+          type: integer
+          minimum: 0
+        texture-failed:
+          type: integer
+          minimum: 0
+        temperature-control-hard:
+          type: integer
+          minimum: 0
+        bland-flavor:
+          type: integer
+          minimum: 0
+        lacks-protein:
           type: integer
           minimum: 0
     PersonalizationInsight:

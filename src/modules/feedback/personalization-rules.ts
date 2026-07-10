@@ -4,9 +4,40 @@ import type {
   FeedbackSignal,
   PersonalizationInsightModel,
 } from "./feedback.model.js";
-import { emptyPersonalizationInsight } from "./feedback.model.js";
+import {
+  emptyFeedbackIssueCounts,
+  emptyPersonalizationInsight,
+} from "./feedback.model.js";
 
 const maxSignal = 0.08;
+const easyRecipeIssues = [
+  "cutting-meat-hard",
+  "hard-to-follow-steps",
+  "pan-sticking-or-burning",
+  "steamed-unevenly",
+  "texture-failed",
+  "temperature-control-hard",
+] as const satisfies readonly FeedbackIssue[];
+const quickRecipeIssues = [
+  "took-longer-than-expected",
+] as const satisfies readonly FeedbackIssue[];
+const ingredientFitIssues = [
+  "missing-ingredients",
+  "lacks-protein",
+] as const satisfies readonly FeedbackIssue[];
+const techniqueGuidanceIssues = [
+  "oil-splatter",
+  "too-oily",
+  "not-crispy",
+  "vegetables-too-soft",
+  "soup-too-bland-or-salty",
+  "ingredients-overcooked",
+  "fishy-smell",
+  "too-dry",
+  "too-sweet",
+  "taste-not-right",
+  "bland-flavor",
+] as const satisfies readonly FeedbackIssue[];
 
 export function buildPersonalizationInsight(
   feedbacks: FeedbackSignal[],
@@ -31,19 +62,19 @@ export function buildPersonalizationInsight(
     confidence,
     signals: {
       preferEasyRecipes: signalFromCount(
-        issueCounts["cutting-meat-hard"],
+        sumIssueCounts(issueCounts, easyRecipeIssues),
         feedbackCount,
       ),
       preferQuickRecipes: signalFromCount(
-        issueCounts["took-longer-than-expected"],
+        sumIssueCounts(issueCounts, quickRecipeIssues),
         feedbackCount,
       ),
       preferIngredientFit: signalFromCount(
-        issueCounts["missing-ingredients"],
+        sumIssueCounts(issueCounts, ingredientFitIssues),
         feedbackCount,
       ),
       preferTechniqueGuidance: signalFromCount(
-        issueCounts["oil-splatter"],
+        sumIssueCounts(issueCounts, techniqueGuidanceIssues),
         feedbackCount,
       ),
     },
@@ -56,19 +87,19 @@ export function buildPersonalizationInsight(
 export function buildInsightMessages(issueCounts: FeedbackIssueCounts) {
   const insights: string[] = [];
 
-  if (issueCounts["cutting-meat-hard"] > 0) {
-    insights.push("Uu tien mon de thao tac va it so che thit.");
+  if (sumIssueCounts(issueCounts, easyRecipeIssues) > 0) {
+    insights.push("Uu tien cong thuc de thao tac va co buoc lam ro rang.");
   }
 
-  if (issueCounts["oil-splatter"] > 0) {
-    insights.push("Giam uu tien mon chien/ngap dau de tranh ban dau.");
+  if (sumIssueCounts(issueCounts, techniqueGuidanceIssues) > 0) {
+    insights.push("Uu tien cong thuc co huong dan ky thuat va canh vi ro hon.");
   }
 
-  if (issueCounts["took-longer-than-expected"] > 0) {
+  if (sumIssueCounts(issueCounts, quickRecipeIssues) > 0) {
     insights.push("Uu tien mon nhanh hon thoi gian du kien.");
   }
 
-  if (issueCounts["missing-ingredients"] > 0) {
+  if (sumIssueCounts(issueCounts, ingredientFitIssues) > 0) {
     insights.push("Tang uu tien cong thuc khop nguyen lieu dang co.");
   }
 
@@ -76,12 +107,7 @@ export function buildInsightMessages(issueCounts: FeedbackIssueCounts) {
 }
 
 function countIssues(feedbacks: FeedbackSignal[]) {
-  const counts: FeedbackIssueCounts = {
-    "cutting-meat-hard": 0,
-    "oil-splatter": 0,
-    "took-longer-than-expected": 0,
-    "missing-ingredients": 0,
-  };
+  const counts: FeedbackIssueCounts = emptyFeedbackIssueCounts();
 
   for (const feedback of feedbacks) {
     for (const issue of new Set<FeedbackIssue>(feedback.issues)) {
@@ -90,6 +116,13 @@ function countIssues(feedbacks: FeedbackSignal[]) {
   }
 
   return counts;
+}
+
+function sumIssueCounts(
+  issueCounts: FeedbackIssueCounts,
+  issues: readonly FeedbackIssue[],
+) {
+  return issues.reduce((sum, issue) => sum + issueCounts[issue], 0);
 }
 
 function signalFromCount(count: number, feedbackCount: number) {
