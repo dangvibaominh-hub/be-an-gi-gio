@@ -38,7 +38,15 @@ const envSchema = z.object({
   GEMINI_API_KEY: z.string().min(1).optional(),
   GEMINI_MODEL: z.string().min(1).optional(),
   GEMINI_FALLBACK_MODELS: z.string().optional(),
+  GEMINI_RECIPE_MODEL: z.string().min(1).optional(),
+  GEMINI_RECIPE_FALLBACK_MODELS: z.string().optional(),
+  GEMINI_RECIPE_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
   CHAT_AI_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+  CHAT_RECIPE_DRAFT_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(12_000),
   CHAT_MESSAGE_RATE_LIMIT_PER_MINUTE: z.coerce
     .number()
     .int()
@@ -69,6 +77,9 @@ const envSchema = z.object({
         : "postgres"),
     SUPABASE_URL: supabaseUrl,
     SUPABASE_PUBLISHABLE_KEY: supabasePublishableKey,
+    GEMINI_RECIPE_MODEL: env.GEMINI_RECIPE_MODEL ?? env.GEMINI_MODEL,
+    GEMINI_RECIPE_FALLBACK_MODELS:
+      env.GEMINI_RECIPE_FALLBACK_MODELS ?? env.GEMINI_FALLBACK_MODELS,
     JWT_ACCESS_SECRET: accessSecret,
     JWT_REFRESH_SECRET: refreshSecret,
   };

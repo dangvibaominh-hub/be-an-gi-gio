@@ -109,6 +109,7 @@ export interface AppDependencies {
   chatPersonalizationRepository?: PersonalizationRepository;
   chatRepository?: ChatRepository;
   chatAssistantAdapter?: ChatAssistantAdapter;
+  chatRecipeDraftTimeoutMs?: number;
   recipeImageStorage?: RecipeImageStorage;
 }
 
@@ -172,8 +173,9 @@ export function createApp(dependencies: AppDependencies = {}) {
     createRecipeGenerationAdapter(
       env.NODE_ENV,
       env.GEMINI_API_KEY,
-      env.GEMINI_MODEL,
-      env.CHAT_AI_TIMEOUT_MS,
+      env.GEMINI_RECIPE_MODEL,
+      env.GEMINI_RECIPE_FALLBACK_MODELS,
+      env.GEMINI_RECIPE_TIMEOUT_MS,
     );
   const generatedRecipeRepository =
     dependencies.generatedRecipeRepository ??
@@ -205,7 +207,11 @@ export function createApp(dependencies: AppDependencies = {}) {
   const chatService = new ChatService(
     chatRepository,
     chatAssistantAdapter,
-    { recipeCandidateLimit: 8 },
+    {
+      recipeCandidateLimit: 8,
+      recipeDraftTimeoutMs:
+        dependencies.chatRecipeDraftTimeoutMs ?? env.CHAT_RECIPE_DRAFT_TIMEOUT_MS,
+    },
     chatPersonalizationRepository,
     recipeGenerationAdapter,
     generatedRecipeRepository,
@@ -353,6 +359,7 @@ function createRecipeGenerationAdapter(
   nodeEnv: "development" | "test" | "production",
   apiKey: string | undefined,
   model: string | undefined,
+  fallbackModels: string | undefined,
   timeoutMs: number,
 ) {
   if (nodeEnv === "test" || apiKey === undefined || model === undefined) {
@@ -362,6 +369,7 @@ function createRecipeGenerationAdapter(
   return new GeminiRecipeGenerationAdapter({
     apiKey,
     model,
+    fallbackModels: parseGeminiFallbackModels(fallbackModels),
     timeoutMs,
   });
 }
