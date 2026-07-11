@@ -58,7 +58,7 @@ describe("GeminiRecipeGenerationAdapter", () => {
     };
     const adapter = new GeminiRecipeGenerationAdapter({
       apiKey: "test-key",
-      model: "gemini-test",
+      model: "gemini-3.5-flash",
       fetchFn,
     });
 
@@ -77,6 +77,9 @@ describe("GeminiRecipeGenerationAdapter", () => {
     expect(requestBody).toMatchObject({
       generationConfig: {
         responseMimeType: "application/json",
+        thinkingConfig: {
+          thinkingLevel: "minimal",
+        },
       },
     });
   });

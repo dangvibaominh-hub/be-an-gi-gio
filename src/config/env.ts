@@ -40,13 +40,13 @@ const envSchema = z.object({
   GEMINI_FALLBACK_MODELS: z.string().optional(),
   GEMINI_RECIPE_MODEL: z.string().min(1).optional(),
   GEMINI_RECIPE_FALLBACK_MODELS: z.string().optional(),
-  GEMINI_RECIPE_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
+  GEMINI_RECIPE_TIMEOUT_MS: z.coerce.number().int().positive().default(12_000),
   CHAT_AI_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   CHAT_RECIPE_DRAFT_TIMEOUT_MS: z.coerce
     .number()
     .int()
     .positive()
-    .default(12_000),
+    .default(15_000),
   CHAT_MESSAGE_RATE_LIMIT_PER_MINUTE: z.coerce
     .number()
     .int()
