@@ -610,9 +610,16 @@ describe("Chat API", () => {
       tokenCount: null,
       recipeReferences: [],
     });
-    expect(sendData.assistantMessage.content).toContain("bản nháp");
-    expect(sendData.assistantMessage.content).toContain("admin");
+    expect(sendData.assistantMessage.content).toContain(
+      "Mình tạo mới một công thức với",
+    );
     expect(sendData.assistantMessage.content).toContain("Mi Trung Hanh La");
+    expect(sendData.assistantMessage.content).toContain(
+      "Chúc bạn nấu vui và ngon miệng",
+    );
+    expect(sendData.assistantMessage.content).not.toMatch(
+      /Gemini|bản nháp|admin|placeholder|Mã bản nháp/i,
+    );
     expect(chatAdapter.inputs).toHaveLength(0);
   });
 
@@ -654,7 +661,9 @@ describe("Chat API", () => {
       role: "assistant",
       model: null,
     });
-    expect(sendData.assistantMessage.content).toContain("chưa thể tạo bản nháp");
+    expect(sendData.assistantMessage.content).toContain(
+      "chưa thể tạo công thức mới",
+    );
     expect(sendData.assistantMessage.recipeReferences).toHaveLength(1);
   });
 
@@ -698,7 +707,9 @@ describe("Chat API", () => {
       role: "assistant",
       model: null,
     });
-    expect(sendData.assistantMessage.content).toContain("chưa thể tạo bản nháp");
+    expect(sendData.assistantMessage.content).toContain(
+      "chưa thể tạo công thức mới",
+    );
   });
 });
 

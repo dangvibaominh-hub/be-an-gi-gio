@@ -211,7 +211,7 @@ export class ChatService {
         } satisfies GeneratedRecipeDraftResult;
       }
 
-      const savedRecipe = await generatedRecipeRepository.save({
+      await generatedRecipeRepository.save({
         recipe,
         slug: createGeneratedRecipeSlug(recipe.title),
         aiModel: recipeGenerationAdapter.model,
@@ -221,7 +221,7 @@ export class ChatService {
       return {
         status: "created",
         draft: {
-          content: formatGeneratedRecipeDraft(recipe, savedRecipe.slug),
+          content: formatGeneratedRecipeDraft(recipe),
           recipeReferences: [],
           model: recipeGenerationAdapter.model,
           latencyMs: Date.now() - startedAt,
@@ -448,7 +448,7 @@ function extractGenerationFilters(message: string): RecommendationFilters {
   return filters;
 }
 
-function formatGeneratedRecipeDraft(recipe: GeneratedRecipe, slug: string) {
+function formatGeneratedRecipeDraft(recipe: GeneratedRecipe) {
   const ingredients = recipe.ingredients
     .slice(0, 10)
     .map(
@@ -460,13 +460,16 @@ function formatGeneratedRecipeDraft(recipe: GeneratedRecipe, slug: string) {
   const steps = recipe.steps
     .slice(0, 8)
     .map((step, index) => `${index + 1}. ${step.content}`);
+  const mainIngredients = recipe.ingredients
+    .slice(0, 4)
+    .map((ingredient) => ingredient.name.toLocaleLowerCase("vi"))
+    .join(", ");
 
   return [
-    "Mình đã tạo một bản nháp công thức mới bằng Gemini. Bản nháp này đang chờ admin kiểm tra và chưa xuất hiện trong catalog chính thức.",
+    `Mình tạo mới một công thức với ${mainIngredients}: ${recipe.title}.`,
     "",
     `Tên món: ${recipe.title}`,
     `Thời gian: khoảng ${recipe.cookTimeMinutes} phút | Độ khó: ${recipe.difficulty} | Khẩu phần: ${recipe.baseServings}`,
-    `Mã bản nháp cho admin kiểm tra: ${slug}`,
     "",
     "Nguyên liệu:",
     ...ingredients,
@@ -474,7 +477,7 @@ function formatGeneratedRecipeDraft(recipe: GeneratedRecipe, slug: string) {
     "Cách làm:",
     ...steps,
     "",
-    "Ảnh món ăn hiện dùng placeholder. Khi duyệt, admin nên kiểm tra nội dung và upload ảnh thật hoặc ảnh có quyền sử dụng.",
+    "Chúc bạn nấu vui và ngon miệng nhé!",
   ].join("\n");
 }
 
@@ -585,8 +588,8 @@ function createRecipeGenerationUnavailableDraft(
   const recipeReferences = candidates.slice(0, 2).map(toRecipeReference);
   const content =
     recipeReferences.length === 0
-      ? "Phụ Bếp chưa thể tạo bản nháp công thức mới lúc này vì dịch vụ tạo công thức phản hồi chậm hoặc không khả dụng. Bạn thử lại sau ít phút, hoặc tìm trong danh sách công thức có sẵn nhé."
-      : "Phụ Bếp chưa thể tạo bản nháp công thức mới lúc này vì dịch vụ tạo công thức phản hồi chậm hoặc không khả dụng. Trong lúc chờ, bạn có thể tham khảo vài công thức gần nhất trong hệ thống.";
+      ? "Phụ Bếp chưa thể tạo công thức mới lúc này vì dịch vụ phản hồi chậm hoặc không khả dụng. Bạn thử lại sau ít phút, hoặc tìm trong danh sách công thức có sẵn nhé."
+      : "Phụ Bếp chưa thể tạo công thức mới lúc này vì dịch vụ phản hồi chậm hoặc không khả dụng. Trong lúc chờ, bạn có thể tham khảo vài công thức gần nhất trong hệ thống.";
 
   return {
     content,
