@@ -40,6 +40,7 @@ import { RECIPE_CATEGORIES } from "../src/modules/recipes/recipe.model.js";
 import type {
   RecipeGenerationAdapter,
   RecipeGenerationInput,
+  RecipeGenerationOptions,
 } from "../src/modules/recommendations/gemini-recipe.adapter.js";
 import type {
   GeneratedRecipeRepository,
@@ -329,6 +330,28 @@ class FailingRecipeGenerationAdapter implements RecipeGenerationAdapter {
   }
 }
 
+class HangingRecipeGenerationAdapter implements RecipeGenerationAdapter {
+  readonly model = "gemini-recipe-test";
+  readonly inputs: RecipeGenerationInput[] = [];
+  abortCount = 0;
+
+  generateRecipe(
+    input: RecipeGenerationInput,
+    options?: RecipeGenerationOptions,
+  ): Promise<null> {
+    this.inputs.push(input);
+    options?.signal?.addEventListener(
+      "abort",
+      () => {
+        this.abortCount += 1;
+      },
+      { once: true },
+    );
+
+    return new Promise<null>(() => undefined);
+  }
+}
+
 class InMemoryGeneratedRecipeRepository implements GeneratedRecipeRepository {
   readonly inputs: SaveGeneratedRecipeInput[] = [];
 
@@ -593,7 +616,7 @@ describe("Chat API", () => {
     expect(chatAdapter.inputs).toHaveLength(0);
   });
 
-  it("falls back to the chat assistant when Gemini recipe draft generation fails", async () => {
+  it("returns a recipe-generation fallback when Gemini recipe draft generation fails", async () => {
     const chatAdapter = new StaticChatAssistantAdapter({
       content: "Phu Bep van co the goi y mon nhanh tu mi va trung.",
       recipeReferences: [],
@@ -625,14 +648,57 @@ describe("Chat API", () => {
     const sendData = responseData<SendChatMessageResult>(sendResponse);
 
     expect(recipeGenerationAdapter.inputs).toHaveLength(1);
-    expect(chatAdapter.inputs).toHaveLength(1);
+    expect(chatAdapter.inputs).toHaveLength(0);
     expect(generatedRecipeRepository.inputs).toHaveLength(0);
     expect(sendData.assistantMessage).toMatchObject({
       role: "assistant",
-      model: "gemini-test",
+      model: null,
+    });
+    expect(sendData.assistantMessage.content).toContain("chưa thể tạo bản nháp");
+    expect(sendData.assistantMessage.recipeReferences).toHaveLength(1);
+  });
+
+  it("aborts slow Gemini recipe draft generation before returning fallback", async () => {
+    const chatAdapter = new StaticChatAssistantAdapter({
+      content: "Khong nen duoc goi khi tao cong thuc bi treo.",
       recipeReferences: [],
     });
-    expect(sendData.assistantMessage.content).toContain("Phu Bep");
+    const recipeGenerationAdapter = new HangingRecipeGenerationAdapter();
+    const generatedRecipeRepository = new InMemoryGeneratedRecipeRepository();
+    const app = createTestApp({
+      chatAssistantAdapter: chatAdapter,
+      recipeGenerationAdapter,
+      generatedRecipeRepository,
+      chatRecipeDraftTimeoutMs: 5,
+    });
+    const token = await registerAndGetToken(app, "draft-timeout@example.com");
+    const conversationResponse = await request(app)
+      .post("/api/v1/chat/conversations")
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+    const conversationId =
+      responseData<ChatConversationModel>(conversationResponse).id;
+
+    const sendResponse = await request(app)
+      .post(`/api/v1/chat/conversations/${conversationId}/messages`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        content:
+          "Tao cong thuc moi de lam voi mi goi, trung va hanh la trong 15 phut",
+      });
+
+    expect(sendResponse.status).toBe(201);
+    const sendData = responseData<SendChatMessageResult>(sendResponse);
+
+    expect(recipeGenerationAdapter.inputs).toHaveLength(1);
+    expect(recipeGenerationAdapter.abortCount).toBe(1);
+    expect(chatAdapter.inputs).toHaveLength(0);
+    expect(generatedRecipeRepository.inputs).toHaveLength(0);
+    expect(sendData.assistantMessage).toMatchObject({
+      role: "assistant",
+      model: null,
+    });
+    expect(sendData.assistantMessage.content).toContain("chưa thể tạo bản nháp");
   });
 });
 
@@ -641,6 +707,7 @@ function createTestApp(options: {
   chatPersonalizationRepository?: PersonalizationRepository;
   recipeGenerationAdapter?: RecipeGenerationAdapter;
   generatedRecipeRepository?: GeneratedRecipeRepository;
+  chatRecipeDraftTimeoutMs?: number;
 } = {}) {
   return createApp({
     authRepository: new InMemoryAuthRepository(),
@@ -660,6 +727,9 @@ function createTestApp(options: {
     ...(options.generatedRecipeRepository === undefined
       ? {}
       : { generatedRecipeRepository: options.generatedRecipeRepository }),
+    ...(options.chatRecipeDraftTimeoutMs === undefined
+      ? {}
+      : { chatRecipeDraftTimeoutMs: options.chatRecipeDraftTimeoutMs }),
   });
 }
 

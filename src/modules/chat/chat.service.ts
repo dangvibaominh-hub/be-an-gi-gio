@@ -32,9 +32,23 @@ import type {
 
 interface ChatServiceOptions {
   recipeCandidateLimit: number;
+  recipeDraftTimeoutMs: number;
+}
+
+interface AssistantDraft {
+  content: string;
+  recipeReferences: ChatRecipeReferenceModel[];
+  model: string | null;
+  latencyMs: number | null;
+  tokenCount: number | null;
 }
 
 const fallbackModel = null;
+
+type GeneratedRecipeDraftResult =
+  | { status: "not-requested" }
+  | { status: "created"; draft: AssistantDraft }
+  | { status: "unavailable"; latencyMs: number | null };
 
 export class ChatService {
   constructor(
@@ -78,18 +92,28 @@ export class ChatService {
       this.options.recipeCandidateLimit,
     );
     const personalization = await this.getPersonalization(userId);
-    const assistantDraft =
-      (await this.createGeneratedRecipeDraft(
-        input.content,
-        personalization,
-        userId,
-      )) ??
-      (await this.createAssistantDraft(
+    const generatedRecipeDraft = await this.createGeneratedRecipeDraft(
+      input.content,
+      personalization,
+      userId,
+    );
+    let assistantDraft: AssistantDraft;
+
+    if (generatedRecipeDraft.status === "created") {
+      assistantDraft = generatedRecipeDraft.draft;
+    } else if (generatedRecipeDraft.status === "unavailable") {
+      assistantDraft = createRecipeGenerationUnavailableDraft(
+        recipeCandidates,
+        generatedRecipeDraft.latencyMs,
+      );
+    } else {
+      assistantDraft = await this.createAssistantDraft(
         input.content,
         [...previousMessages, userMessage],
         recipeCandidates,
         personalization,
-      ));
+      );
+    }
     const assistantMessage = await this.repository.addMessage({
       conversationId,
       role: "assistant",
@@ -132,43 +156,78 @@ export class ChatService {
     personalization: PersonalizationInsightModel | undefined,
     userId: string,
   ) {
+    if (!shouldCreateGeneratedRecipeDraft(message)) {
+      return { status: "not-requested" } satisfies GeneratedRecipeDraftResult;
+    }
+
+    const recipeGenerationAdapter = this.recipeGenerationAdapter;
+    const generatedRecipeRepository = this.generatedRecipeRepository;
+
     if (
-      !shouldCreateGeneratedRecipeDraft(message) ||
-      this.recipeGenerationAdapter === undefined ||
-      this.generatedRecipeRepository === undefined
+      recipeGenerationAdapter === undefined ||
+      generatedRecipeRepository === undefined
     ) {
-      return null;
+      logger.warn(
+        { feature: "chat.recipe_generation.adapter_missing", userId },
+        "Gemini recipe draft generation is not configured.",
+      );
+      return {
+        status: "unavailable",
+        latencyMs: null,
+      } satisfies GeneratedRecipeDraftResult;
     }
 
     const startedAt = Date.now();
     const request = buildChatRecipeGenerationRequest(message);
 
     try {
-      const recipe = await this.recipeGenerationAdapter.generateRecipe({
-        ingredients: request.ingredients,
-        filters: request.filters,
-        request: message,
-        userContext: buildPersonalizationContext(personalization),
-      });
+      const recipe = await runWithTimeout(
+        (signal) =>
+          recipeGenerationAdapter.generateRecipe(
+            {
+              ingredients: request.ingredients,
+              filters: request.filters,
+              request: message,
+              userContext: buildPersonalizationContext(personalization),
+            },
+            { signal },
+          ),
+        this.options.recipeDraftTimeoutMs,
+        "Gemini recipe draft generation timed out.",
+      );
 
       if (recipe === null) {
-        return null;
+        logger.warn(
+          {
+            feature: "chat.recipe_generation.empty",
+            model: recipeGenerationAdapter.model,
+            userId,
+          },
+          "Gemini recipe draft generation returned no usable recipe.",
+        );
+        return {
+          status: "unavailable",
+          latencyMs: Date.now() - startedAt,
+        } satisfies GeneratedRecipeDraftResult;
       }
 
-      const savedRecipe = await this.generatedRecipeRepository.save({
+      const savedRecipe = await generatedRecipeRepository.save({
         recipe,
         slug: createGeneratedRecipeSlug(recipe.title),
-        aiModel: this.recipeGenerationAdapter.model,
+        aiModel: recipeGenerationAdapter.model,
         createdBy: userId,
       });
 
       return {
-        content: formatGeneratedRecipeDraft(recipe, savedRecipe.slug),
-        recipeReferences: [],
-        model: this.recipeGenerationAdapter.model,
-        latencyMs: Date.now() - startedAt,
-        tokenCount: null,
-      };
+        status: "created",
+        draft: {
+          content: formatGeneratedRecipeDraft(recipe, savedRecipe.slug),
+          recipeReferences: [],
+          model: recipeGenerationAdapter.model,
+          latencyMs: Date.now() - startedAt,
+          tokenCount: null,
+        },
+      } satisfies GeneratedRecipeDraftResult;
     } catch (error) {
       logger.warn(
         {
@@ -176,9 +235,12 @@ export class ChatService {
           feature: "chat.recipe_generation",
           userId,
         },
-        "Gemini recipe draft generation failed; falling back to chat assistant.",
+        "Gemini recipe draft generation failed; returning draft-generation fallback.",
       );
-      return null;
+      return {
+        status: "unavailable",
+        latencyMs: Date.now() - startedAt,
+      } satisfies GeneratedRecipeDraftResult;
     }
   }
 
@@ -500,12 +562,31 @@ function sumPersonalizationIssueCounts(
 function createFallbackDraft(
   candidates: ChatRecipeCandidateModel[],
   latencyMs: number | null = null,
-) {
+): AssistantDraft {
   const recipeReferences = candidates.slice(0, 2).map(toRecipeReference);
   const content =
     recipeReferences.length === 0
       ? "Phụ Bếp chưa thể trả lời bạn lúc này. Bạn có thể thử tìm trong danh sách công thức có sẵn và quay lại sau."
       : "Phụ Bếp chưa thể trả lời bạn lúc này. Bạn có thể tham khảo vài công thức có sẵn trong hệ thống trước nhé.";
+
+  return {
+    content,
+    recipeReferences,
+    model: fallbackModel,
+    latencyMs,
+    tokenCount: null,
+  };
+}
+
+function createRecipeGenerationUnavailableDraft(
+  candidates: ChatRecipeCandidateModel[],
+  latencyMs: number | null = null,
+): AssistantDraft {
+  const recipeReferences = candidates.slice(0, 2).map(toRecipeReference);
+  const content =
+    recipeReferences.length === 0
+      ? "Phụ Bếp chưa thể tạo bản nháp công thức mới lúc này vì dịch vụ tạo công thức phản hồi chậm hoặc không khả dụng. Bạn thử lại sau ít phút, hoặc tìm trong danh sách công thức có sẵn nhé."
+      : "Phụ Bếp chưa thể tạo bản nháp công thức mới lúc này vì dịch vụ tạo công thức phản hồi chậm hoặc không khả dụng. Trong lúc chờ, bạn có thể tham khảo vài công thức gần nhất trong hệ thống.";
 
   return {
     content,
@@ -538,4 +619,35 @@ function serializeGeminiError(error: unknown) {
   return {
     message: String(error),
   };
+}
+
+function runWithTimeout<T>(
+  task: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string,
+) {
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      controller.abort();
+      reject(new OperationTimeoutError(timeoutMessage, timeoutMs));
+    }, timeoutMs);
+  });
+
+  return Promise.race([task(controller.signal), timeoutPromise]).finally(() => {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  });
+}
+
+class OperationTimeoutError extends Error {
+  constructor(
+    message: string,
+    readonly timeoutMs: number,
+  ) {
+    super(message);
+    this.name = "OperationTimeoutError";
+  }
 }
