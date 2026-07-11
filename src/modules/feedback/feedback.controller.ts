@@ -8,6 +8,17 @@ import type { SubmitFeedbackInput } from "./feedback.types.js";
 export class FeedbackController {
   constructor(private readonly service: FeedbackService) {}
 
+  options: RequestHandler = asyncHandler(async (request, response) => {
+    const auth = requireAuthenticatedUser(request);
+    const { id } = response.locals.validatedParams as { id: string };
+    const options = await this.service.getOptions(auth.userId, id);
+
+    response.json({
+      success: true,
+      data: options,
+    });
+  });
+
   submit: RequestHandler = asyncHandler(async (request, response) => {
     const auth = requireAuthenticatedUser(request);
     const { id } = response.locals.validatedParams as { id: string };

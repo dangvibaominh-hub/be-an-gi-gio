@@ -249,6 +249,41 @@ function createTestApp() {
 }
 
 describe("Feedback API", () => {
+  it("returns feedback tag options for the session recipe category", async () => {
+    const app = createTestApp();
+    const accessToken = await register(app);
+
+    const response = await request(app)
+      .get(`/api/v1/cooking-sessions/${completedSessionId}/feedback/options`)
+      .set("Authorization", `Bearer ${accessToken}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      success: true,
+      data: {
+        cookingSessionId: completedSessionId,
+        recipeId: "recipe-1",
+        recipeCategory: "Món xào",
+        issues: [
+          { value: "cutting-meat-hard", label: "Cắt thịt khó quá" },
+          {
+            value: "pan-sticking-or-burning",
+            label: "Bị dính hoặc cháy chảo",
+          },
+          { value: "vegetables-too-soft", label: "Rau bị mềm quá" },
+          { value: "too-oily", label: "Món bị nhiều dầu" },
+          {
+            value: "took-longer-than-expected",
+            label: "Mất nhiều thời gian hơn dự kiến",
+          },
+          { value: "missing-ingredients", label: "Thiếu nguyên liệu" },
+          { value: "hard-to-follow-steps", label: "Các bước hơi khó theo" },
+          { value: "taste-not-right", label: "Vị chưa đúng ý" },
+        ],
+      },
+    });
+  });
+
   it("saves cooking feedback and exposes personalization insight", async () => {
     const app = createTestApp();
     const accessToken = await register(app);
@@ -360,6 +395,11 @@ describe("Feedback API", () => {
 
   it("requires authentication and validates rating", async () => {
     const app = createTestApp();
+
+    const optionsAuthResponse = await request(app).get(
+      `/api/v1/cooking-sessions/${completedSessionId}/feedback/options`,
+    );
+    expect(optionsAuthResponse.status).toBe(401);
 
     const authResponse = await request(app)
       .post(`/api/v1/cooking-sessions/${completedSessionId}/feedback`)

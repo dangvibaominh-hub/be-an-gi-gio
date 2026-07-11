@@ -33,6 +33,29 @@ export const GENERAL_FEEDBACK_ISSUES = [
   "taste-not-right",
 ] as const satisfies readonly FeedbackIssue[];
 
+export const FEEDBACK_ISSUE_LABELS = {
+  "cutting-meat-hard": "Cắt thịt khó quá",
+  "oil-splatter": "Chiên bị bắn dầu",
+  "took-longer-than-expected": "Mất nhiều thời gian hơn dự kiến",
+  "missing-ingredients": "Thiếu nguyên liệu",
+  "hard-to-follow-steps": "Các bước hơi khó theo",
+  "taste-not-right": "Vị chưa đúng ý",
+  "too-oily": "Món bị nhiều dầu",
+  "not-crispy": "Chiên chưa giòn",
+  "pan-sticking-or-burning": "Bị dính hoặc cháy chảo",
+  "vegetables-too-soft": "Rau bị mềm quá",
+  "soup-too-bland-or-salty": "Canh nhạt hoặc mặn",
+  "ingredients-overcooked": "Nguyên liệu bị quá chín",
+  "steamed-unevenly": "Hấp chưa chín đều",
+  "fishy-smell": "Còn mùi tanh",
+  "too-dry": "Món bị khô",
+  "too-sweet": "Quá ngọt",
+  "texture-failed": "Kết cấu chưa đạt",
+  "temperature-control-hard": "Khó canh nhiệt",
+  "bland-flavor": "Vị hơi nhạt",
+  "lacks-protein": "Thiếu đạm",
+} as const satisfies Record<FeedbackIssue, string>;
+
 export const FEEDBACK_ISSUES_BY_CATEGORY = {
   "Món xào": [
     "cutting-meat-hard",
@@ -68,10 +91,19 @@ export const FEEDBACK_ISSUES_BY_CATEGORY = {
 export function getAllowedFeedbackIssuesForCategory(category: RecipeCategory) {
   return Array.from(
     new Set<FeedbackIssue>([
-      ...GENERAL_FEEDBACK_ISSUES,
       ...FEEDBACK_ISSUES_BY_CATEGORY[category],
+      ...GENERAL_FEEDBACK_ISSUES,
     ]),
   );
+}
+
+export function getAllowedFeedbackIssueOptionsForCategory(
+  category: RecipeCategory,
+) {
+  return getAllowedFeedbackIssuesForCategory(category).map((issue) => ({
+    value: issue,
+    label: FEEDBACK_ISSUE_LABELS[issue],
+  }));
 }
 
 export function isFeedbackIssueAllowedForCategory(
@@ -109,6 +141,18 @@ export interface CookingFeedbackSummary {
 export interface FeedbackSignal {
   rating: number;
   issues: FeedbackIssue[];
+}
+
+export interface FeedbackIssueOption {
+  value: FeedbackIssue;
+  label: string;
+}
+
+export interface FeedbackOptionsModel {
+  cookingSessionId: string;
+  recipeId: string;
+  recipeCategory: RecipeCategory;
+  issues: FeedbackIssueOption[];
 }
 
 export interface PersonalizationSignals {

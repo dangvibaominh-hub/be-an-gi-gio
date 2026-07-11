@@ -1,9 +1,14 @@
 import { AppError } from "../../shared/http/app-error.js";
 import type {
   CookingFeedbackModel,
+  FeedbackOptionsModel,
+  FeedbackSessionRecord,
   PersonalizationInsightModel,
 } from "./feedback.model.js";
-import { isFeedbackIssueAllowedForCategory } from "./feedback.model.js";
+import {
+  getAllowedFeedbackIssueOptionsForCategory,
+  isFeedbackIssueAllowedForCategory,
+} from "./feedback.model.js";
 import type { FeedbackRepository } from "./feedback.repository.js";
 import type { SubmitFeedbackInput } from "./feedback.types.js";
 import { buildPersonalizationInsight } from "./personalization-rules.js";
@@ -16,23 +21,28 @@ export interface SubmitFeedbackResult {
 export class FeedbackService {
   constructor(private readonly repository: FeedbackRepository) {}
 
+  async getOptions(
+    userId: string,
+    cookingSessionId: string,
+  ): Promise<FeedbackOptionsModel> {
+    const session = await this.findSession(userId, cookingSessionId);
+
+    return {
+      cookingSessionId: session.id,
+      recipeId: session.recipeId,
+      recipeCategory: session.recipeCategory,
+      issues: getAllowedFeedbackIssueOptionsForCategory(
+        session.recipeCategory,
+      ),
+    };
+  }
+
   async submit(
     userId: string,
     cookingSessionId: string,
     input: SubmitFeedbackInput,
   ): Promise<SubmitFeedbackResult> {
-    const session = await this.repository.findSessionForFeedback(
-      userId,
-      cookingSessionId,
-    );
-
-    if (session === null) {
-      throw new AppError(
-        404,
-        "COOKING_SESSION_NOT_FOUND",
-        "Khong tim thay phien nau nay.",
-      );
-    }
+    const session = await this.findSession(userId, cookingSessionId);
 
     if (session.status !== "COMPLETED") {
       throw new AppError(
@@ -71,5 +81,25 @@ export class FeedbackService {
 
   getPersonalization(userId: string) {
     return this.repository.getInsight(userId);
+  }
+
+  private async findSession(
+    userId: string,
+    cookingSessionId: string,
+  ): Promise<FeedbackSessionRecord> {
+    const session = await this.repository.findSessionForFeedback(
+      userId,
+      cookingSessionId,
+    );
+
+    if (session === null) {
+      throw new AppError(
+        404,
+        "COOKING_SESSION_NOT_FOUND",
+        "Khong tim thay phien nau nay.",
+      );
+    }
+
+    return session;
   }
 }

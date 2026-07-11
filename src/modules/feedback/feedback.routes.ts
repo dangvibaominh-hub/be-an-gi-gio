@@ -20,6 +20,13 @@ export function createCookingFeedbackRouter(
   const router = Router();
   const controller = new FeedbackController(service);
 
+  router.get(
+    "/:id/feedback/options",
+    authenticate(authService),
+    validateParams(feedbackSessionParamsSchema),
+    controller.options,
+  );
+
   router.post(
     "/:id/feedback",
     authenticate(authService),
