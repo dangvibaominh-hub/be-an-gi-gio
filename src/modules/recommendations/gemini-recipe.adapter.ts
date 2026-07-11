@@ -140,6 +140,7 @@ export class GeminiRecipeGenerationAdapter
               maxOutputTokens: 2048,
               responseMimeType: "application/json",
               responseSchema: geminiRecipeResponseSchema,
+              thinkingConfig: buildThinkingConfig(model),
             },
           }),
         },
@@ -270,6 +271,20 @@ function stripJsonFence(text: string) {
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/i, "")
     .trim();
+}
+
+function buildThinkingConfig(model: string) {
+  const normalizedModel = model.toLocaleLowerCase("en-US");
+
+  if (/\bgemini-3(?:\.|\b)/.test(normalizedModel)) {
+    return { thinkingLevel: "minimal" };
+  }
+
+  if (normalizedModel.includes("gemini-2.5")) {
+    return { thinkingBudget: 0 };
+  }
+
+  return undefined;
 }
 
 function uniqueModels(models: string[]) {
