@@ -5,6 +5,7 @@ import { createApp } from "../src/app.js";
 import type { CategoryRepository } from "../src/modules/categories/category.repository.js";
 import type {
   RecommendationCandidate,
+  RecommendationCandidateIngredient,
   RecommendationRepository,
 } from "../src/modules/recommendations/recommendation.repository.js";
 import type {
@@ -108,6 +109,18 @@ class FakeRecommendationRepository implements RecommendationRepository {
     this.lastFilters = filters;
     return Promise.resolve(candidates);
   }
+
+  listIngredientVocabulary() {
+    const ingredients = new Map<string, RecommendationCandidateIngredient>();
+
+    for (const candidate of candidates) {
+      for (const ingredient of candidate.ingredients) {
+        ingredients.set(ingredient.id, ingredient);
+      }
+    }
+
+    return Promise.resolve(Array.from(ingredients.values()));
+  }
 }
 
 function createTestApp() {
@@ -178,5 +191,25 @@ describe("Recommendation API", () => {
     expect(response.status).toBe(400);
     const body = response.body as { error: { code: string } };
     expect(body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("returns an unknown ingredients error for unrecognized inputs", async () => {
+    const { app } = createTestApp();
+
+    const response = await request(app)
+      .post("/api/v1/recommendations")
+      .send({ ingredients: ["abc", "hoa bỉ ngạn xanh"] });
+
+    expect(response.status).toBe(422);
+    expect(response.body).toMatchObject({
+      success: false,
+      error: {
+        code: "UNKNOWN_INGREDIENTS",
+        message: "Có thành phần không xác định.",
+        details: {
+          unknownIngredients: ["abc", "hoa bỉ ngạn xanh"],
+        },
+      },
+    });
   });
 });

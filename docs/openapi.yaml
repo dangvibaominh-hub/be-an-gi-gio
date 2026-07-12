@@ -338,6 +338,12 @@ paths:
                     $ref: "#/components/schemas/RecommendationMeta"
         "400":
           $ref: "#/components/responses/ValidationError"
+        "422":
+          description: Có thành phần không xác định trong danh sách nguyên liệu
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/cooking-sessions:
     post:
       tags: [CookingSessions]
@@ -1262,6 +1268,21 @@ components:
           properties:
             match:
               $ref: "#/components/schemas/RecommendationMatch"
+            ingredients:
+              description: Chỉ có khi meta.source là gemini để front-end render món vừa sinh.
+              type: array
+              items:
+                $ref: "#/components/schemas/RecipeIngredient"
+            steps:
+              description: Chỉ có khi meta.source là gemini để front-end render các bước nấu.
+              type: array
+              items:
+                $ref: "#/components/schemas/RecipeStep"
+            cookingTerms:
+              description: Chỉ có khi meta.source là gemini; hiện mặc định là object rỗng.
+              type: object
+              additionalProperties:
+                type: string
     RecommendationMatch:
       type: object
       required: [score, matchedIngredients, missingIngredients]

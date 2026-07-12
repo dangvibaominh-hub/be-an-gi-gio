@@ -9,10 +9,30 @@ export function normalizeIngredientName(value: string) {
     .trim();
 }
 
+export function normalizeIngredientNameStrict(value: string) {
+  return value
+    .normalize("NFC")
+    .toLocaleLowerCase("vi")
+    .replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .normalize("NFC");
+}
+
 export function tokenizeIngredientName(value: string) {
   const normalized = normalizeIngredientName(value);
 
   return normalized.length === 0 ? [] : normalized.split(" ");
+}
+
+export function tokenizeIngredientNameStrict(value: string) {
+  const normalized = normalizeIngredientNameStrict(value);
+
+  return normalized.length === 0 ? [] : normalized.split(" ");
+}
+
+export function hasVietnameseMarks(value: string) {
+  return /[\u0300-\u036f\u0111\u0110]/u.test(value.normalize("NFD"));
 }
 
 export function createIngredientAliasSet(values: string[]) {

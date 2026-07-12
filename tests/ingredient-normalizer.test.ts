@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   createIngredientAliasSet,
+  hasVietnameseMarks,
   normalizeIngredientName,
+  normalizeIngredientNameStrict,
   tokenizeIngredientName,
+  tokenizeIngredientNameStrict,
 } from "../src/modules/recommendations/ingredient-normalizer.js";
 
 describe("ingredient normalizer", () => {
@@ -20,6 +23,13 @@ describe("ingredient normalizer", () => {
       "mam",
       "ngon",
     ]);
+  });
+
+  it("can preserve Vietnamese marks for accent-sensitive matching", () => {
+    expect(normalizeIngredientNameStrict(" Bơ!! ")).toBe("bơ");
+    expect(tokenizeIngredientNameStrict("Thịt bò")).toEqual(["thịt", "bò"]);
+    expect(hasVietnameseMarks("bơ")).toBe(true);
+    expect(hasVietnameseMarks("bo")).toBe(false);
   });
 
   it("deduplicates normalized aliases", () => {

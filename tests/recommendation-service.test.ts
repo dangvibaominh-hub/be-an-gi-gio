@@ -4,17 +4,17 @@ import { RECIPE_CATEGORIES } from "../src/modules/recipes/recipe.model.js";
 import { emptyFeedbackIssueCounts } from "../src/modules/feedback/feedback.model.js";
 import type { RecipeGenerationAdapter } from "../src/modules/recommendations/gemini-recipe.adapter.js";
 import type { PersonalizationRepository } from "../src/modules/feedback/feedback.repository.js";
-import type { RecommendationRepository } from "../src/modules/recommendations/recommendation.repository.js";
 import type {
   GeneratedRecipeRepository,
+  RecommendationCandidate,
+  RecommendationCandidateIngredient,
+  RecommendationRepository,
   SaveGeneratedRecipeInput,
 } from "../src/modules/recommendations/recommendation.repository.js";
 import { RecommendationService } from "../src/modules/recommendations/recommendation.service.js";
 import type { SavedRecipeRepository } from "../src/modules/saved-recipes/saved-recipe.repository.js";
 
-const recommendationRepository: RecommendationRepository = {
-  listCandidates() {
-    return Promise.resolve([
+const baseCandidates: RecommendationCandidate[] = [
       {
         id: "recipe-1",
         slug: "rau-muong-xao-toi",
@@ -41,9 +41,9 @@ const recommendationRepository: RecommendationRepository = {
           },
         ],
       },
-    ]);
-  },
-};
+];
+
+const recommendationRepository = createRecommendationRepository(baseCandidates);
 
 const savedRecipeRepository: SavedRecipeRepository = {
   list() {
@@ -70,6 +70,31 @@ const savedRecipeRepository: SavedRecipeRepository = {
     return Promise.resolve(false);
   },
 };
+
+function createRecommendationRepository(
+  candidates: RecommendationCandidate[],
+): RecommendationRepository {
+  return {
+    listCandidates() {
+      return Promise.resolve(candidates);
+    },
+    listIngredientVocabulary() {
+      return Promise.resolve(createIngredientVocabulary(candidates));
+    },
+  };
+}
+
+function createIngredientVocabulary(candidates: RecommendationCandidate[]) {
+  const ingredients = new Map<string, RecommendationCandidateIngredient>();
+
+  for (const candidate of candidates) {
+    for (const ingredient of candidate.ingredients) {
+      ingredients.set(ingredient.id, ingredient);
+    }
+  }
+
+  return Array.from(ingredients.values());
+}
 
 describe("RecommendationService", () => {
   it("boosts saved recipes when a user is authenticated", async () => {
@@ -120,9 +145,7 @@ describe("RecommendationService", () => {
   });
 
   it("matches ingredients by exact normalized name or alias only", async () => {
-    const fishRepository: RecommendationRepository = {
-      listCandidates() {
-        return Promise.resolve([
+    const fishCandidates: RecommendationCandidate[] = [
           {
             id: "recipe-fish",
             slug: "ca-hap",
@@ -203,9 +226,8 @@ describe("RecommendationService", () => {
               },
             ],
           },
-        ]);
-      },
-    };
+    ];
+    const fishRepository = createRecommendationRepository(fishCandidates);
     const service = new RecommendationService(fishRepository, 0.55);
 
     const genericFishResult = await service.recommend({
@@ -250,10 +272,113 @@ describe("RecommendationService", () => {
     ]);
   });
 
+  it("distinguishes avocado from beef when Vietnamese tone marks differ", async () => {
+    const avocadoCandidates: RecommendationCandidate[] = [
+      {
+        id: "recipe-beef",
+        slug: "bo-xao-hanh-tay",
+        title: "Bò xào hành tây",
+        description: "Món bò xào nhanh cho bữa cơm.",
+        image: "/images/recipes/bo-xao-hanh-tay.png",
+        imageAlt: "Đĩa bò xào hành tây",
+        difficulty: "de",
+        cookTimeMinutes: 20,
+        baseServings: 2,
+        category: RECIPE_CATEGORIES[0],
+        ingredients: [
+          {
+            id: "ingredient-beef",
+            name: "Thịt bò",
+            normalizedName: "thit bo",
+            aliases: ["bo"],
+          },
+        ],
+      },
+      {
+        id: "recipe-avocado",
+        slug: "sinh-to-bo",
+        title: "Sinh tố bơ",
+        description: "Sinh tố bơ mịn béo cho món tráng miệng.",
+        image: "/images/recipes/sinh-to-bo.png",
+        imageAlt: "Ly sinh tố bơ xanh mịn",
+        difficulty: "de",
+        cookTimeMinutes: 10,
+        baseServings: 2,
+        category: RECIPE_CATEGORIES[5],
+        ingredients: [
+          {
+            id: "ingredient-avocado",
+            name: "Bơ",
+            normalizedName: "bo",
+            aliases: ["avocado"],
+          },
+        ],
+      },
+    ];
+    const service = new RecommendationService(
+      createRecommendationRepository(avocadoCandidates),
+      0.55,
+    );
+
+    const avocadoResult = await service.recommend({
+      ingredients: ["bơ"],
+      filters: {},
+      page: 1,
+      limit: 12,
+    });
+    const beefResult = await service.recommend({
+      ingredients: ["bò"],
+      filters: {},
+      page: 1,
+      limit: 12,
+    });
+
+    expect(avocadoResult.items.map((item) => item.slug)).toEqual(["sinh-to-bo"]);
+    expect(beefResult.items.map((item) => item.slug)).toEqual([
+      "bo-xao-hanh-tay",
+    ]);
+  });
+
+  it("rejects ingredients that are not in the ingredient vocabulary", async () => {
+    let geminiCalled = false;
+    const recipeGenerationAdapter: RecipeGenerationAdapter = {
+      model: "gemini-test",
+      generateRecipe() {
+        geminiCalled = true;
+        return Promise.resolve(null);
+      },
+    };
+    const service = new RecommendationService(
+      recommendationRepository,
+      0.55,
+      undefined,
+      recipeGenerationAdapter,
+    );
+
+    await expect(
+      service.recommend({
+        ingredients: ["cá mập đại dương", "abc", "hoa bỉ ngạn xanh"],
+        filters: {},
+        page: 1,
+        limit: 12,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 422,
+      code: "UNKNOWN_INGREDIENTS",
+      message: "Có thành phần không xác định.",
+      details: {
+        unknownIngredients: [
+          "cá mập đại dương",
+          "abc",
+          "hoa bỉ ngạn xanh",
+        ],
+      },
+    });
+    expect(geminiCalled).toBe(false);
+  });
+
   it("reranks recommendations with personalization preferences", async () => {
-    const personalizedRepository: RecommendationRepository = {
-      listCandidates() {
-        return Promise.resolve([
+    const personalizedCandidates: RecommendationCandidate[] = [
           {
             id: "recipe-hard",
             slug: "ga-chien-gion",
@@ -300,9 +425,9 @@ describe("RecommendationService", () => {
               },
             ],
           },
-        ]);
-      },
-    };
+    ];
+    const personalizedRepository =
+      createRecommendationRepository(personalizedCandidates);
     const personalizationRepository: PersonalizationRepository = {
       getInsight() {
         return Promise.resolve({
@@ -357,6 +482,22 @@ describe("RecommendationService", () => {
     const emptyRepository: RecommendationRepository = {
       listCandidates() {
         return Promise.resolve([]);
+      },
+      listIngredientVocabulary() {
+        return Promise.resolve([
+          {
+            id: "ingredient-known-1",
+            name: "Bi do",
+            normalizedName: "bi do",
+            aliases: [],
+          },
+          {
+            id: "ingredient-known-2",
+            name: "Trung",
+            normalizedName: "trung",
+            aliases: [],
+          },
+        ]);
       },
     };
     const recipeGenerationAdapter: RecipeGenerationAdapter = {
@@ -428,6 +569,23 @@ describe("RecommendationService", () => {
               aliases: [],
             },
           ],
+          ingredientDetails: input.recipe.ingredients.map((ingredient, index) => ({
+            id: `ingredient-${index + 1}`,
+            name: ingredient.name,
+            baseAmount: ingredient.amount,
+            unit: ingredient.unit,
+            prepNote: ingredient.prepNote,
+            haveIt: false,
+          })),
+          steps: input.recipe.steps.map((step, index) => ({
+            id: `step-${index + 1}`,
+            content: step.content,
+            estimatedMinutes: step.estimatedMinutes,
+            techniqueIcon: step.techniqueIcon,
+            isTricky: step.isTricky,
+            timerSeconds: step.timerSeconds,
+          })),
+          cookingTerms: {},
         });
       },
     };
@@ -452,17 +610,45 @@ describe("RecommendationService", () => {
     expect(result.source).toBe("gemini");
     expect(result.total).toBe(1);
     expect(result.items[0]?.slug.startsWith("gemini-")).toBe(true);
-    expect(result.items[0]).toMatchObject({
-      match: {
-        matchedIngredients: ["bi do", "trung"],
-        missingIngredients: ["Dau an"],
-      },
+    expect(result.items[0]?.ingredients).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Bi do",
+          baseAmount: 300,
+          unit: "g",
+        }),
+      ]),
+    );
+    expect(result.items[0]?.steps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          content: "Lam nong chao voi dau an, cho bi do vao xao mem.",
+          techniqueIcon: "chao",
+        }),
+        expect.objectContaining({
+          content: "Do trung vao, dao deu den khi trung chin va bam quanh bi.",
+          techniqueIcon: "tron",
+        }),
+      ]),
+    );
+    expect(result.items[0]?.cookingTerms).toEqual({});
+    expect(result.items[0]?.match).toMatchObject({
+      matchedIngredients: ["bi do", "trung"],
+      missingIngredients: ["Dau an"],
     });
     expect(savedInput).toMatchObject({
       aiModel: "gemini-test",
       createdBy: "user-1",
       recipe: {
         title: "Bi Do Xao Trung",
+        steps: [
+          {
+            content: "Lam nong chao voi dau an, cho bi do vao xao mem.",
+          },
+          {
+            content: "Do trung vao, dao deu den khi trung chin va bam quanh bi.",
+          },
+        ],
       },
     });
   });
@@ -471,6 +657,16 @@ describe("RecommendationService", () => {
     const emptyRepository: RecommendationRepository = {
       listCandidates() {
         return Promise.resolve([]);
+      },
+      listIngredientVocabulary() {
+        return Promise.resolve([
+          {
+            id: "ingredient-known-1",
+            name: "Bi do",
+            normalizedName: "bi do",
+            aliases: [],
+          },
+        ]);
       },
     };
     const recipeGenerationAdapter: RecipeGenerationAdapter = {

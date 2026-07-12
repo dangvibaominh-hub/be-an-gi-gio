@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 
 import { logger } from "../../config/logger.js";
-import { normalizeIngredientName } from "./ingredient-normalizer.js";
+import { AppError } from "../../shared/http/app-error.js";
+import {
+  hasVietnameseMarks,
+  normalizeIngredientName,
+  normalizeIngredientNameStrict,
+  tokenizeIngredientNameStrict,
+} from "./ingredient-normalizer.js";
 import type {
   GeneratedRecipeRepository,
   RecommendationCandidate,
@@ -25,6 +31,9 @@ import type {
 interface NormalizedInput {
   original: string;
   normalized: string;
+  strictNormalized: string;
+  strictTokens: string[];
+  hasMarks: boolean;
 }
 
 export class RecommendationService {
@@ -44,21 +53,29 @@ export class RecommendationService {
     const inputs = query.ingredients.map((ingredient) => ({
       original: ingredient,
       normalized: normalizeIngredientName(ingredient),
+      strictNormalized: normalizeIngredientNameStrict(ingredient),
+      strictTokens: tokenizeIngredientNameStrict(ingredient),
+      hasMarks: hasVietnameseMarks(ingredient),
     }));
-    const savedRecipeSlugs =
+    const savedRecipePromise =
       userId === undefined || this.savedRecipeRepository === undefined
-        ? new Set<string>()
-        : new Set(
-            (await this.savedRecipeRepository.list(userId)).map(
-              (recipe) => recipe.slug,
-            ),
-          );
-    const personalization =
+        ? Promise.resolve([])
+        : this.savedRecipeRepository.list(userId);
+    const personalizationPromise =
       userId === undefined || this.personalizationRepository === undefined
-        ? undefined
-        : await this.personalizationRepository.getInsight(userId);
+        ? Promise.resolve(undefined)
+        : this.personalizationRepository.getInsight(userId);
+    const [savedRecipes, personalization, ingredientVocabulary, candidates] =
+      await Promise.all([
+        savedRecipePromise,
+        personalizationPromise,
+        this.repository.listIngredientVocabulary(),
+        this.repository.listCandidates(query.filters),
+      ]);
+    const savedRecipeSlugs = new Set(savedRecipes.map((recipe) => recipe.slug));
 
-    const candidates = await this.repository.listCandidates(query.filters);
+    assertKnownIngredients(inputs, ingredientVocabulary);
+
     const scoredCandidates = candidates
       .map((candidate) =>
         scoreCandidate(
@@ -204,6 +221,13 @@ function scoreCandidate(
     cookTimeMinutes: candidate.cookTimeMinutes,
     baseServings: candidate.baseServings,
     category: candidate.category,
+    ...(candidate.ingredientDetails === undefined
+      ? {}
+      : { ingredients: candidate.ingredientDetails }),
+    ...(candidate.steps === undefined ? {} : { steps: candidate.steps }),
+    ...(candidate.cookingTerms === undefined
+      ? {}
+      : { cookingTerms: candidate.cookingTerms }),
     match: {
       score,
       matchedIngredients: inputs
@@ -267,13 +291,74 @@ function ingredientMatchesInput(
   ingredient: RecommendationCandidateIngredient,
   input: NormalizedInput,
 ) {
-  return [ingredient.normalizedName, ...ingredient.aliases].some((candidate) =>
-    normalizedValuesMatch(candidate, input),
+  const values = createIngredientMatchValues(ingredient);
+
+  if (!input.hasMarks) {
+    return values.some((candidate) => candidate.normalized === input.normalized);
+  }
+
+  if (
+    values.some((candidate) => candidate.strictNormalized === input.strictNormalized)
+  ) {
+    return true;
+  }
+
+  const hasFoldedExactMatch = values.some(
+    (candidate) => candidate.normalized === input.normalized,
+  );
+
+  if (!hasFoldedExactMatch) {
+    return false;
+  }
+
+  if (input.strictTokens.length > 1) {
+    return true;
+  }
+
+  const [onlyToken] = input.strictTokens;
+
+  return (
+    onlyToken !== undefined &&
+    tokenizeIngredientNameStrict(ingredient.name).includes(onlyToken)
   );
 }
 
-function normalizedValuesMatch(value: string, input: NormalizedInput) {
-  return normalizeIngredientName(value) === input.normalized;
+function createIngredientMatchValues(ingredient: RecommendationCandidateIngredient) {
+  return [ingredient.name, ingredient.normalizedName, ...ingredient.aliases]
+    .map((value) => ({
+      normalized: normalizeIngredientName(value),
+      strictNormalized: normalizeIngredientNameStrict(value),
+    }))
+    .filter(
+      (value) =>
+        value.normalized.length > 0 && value.strictNormalized.length > 0,
+    );
+}
+
+function assertKnownIngredients(
+  inputs: NormalizedInput[],
+  ingredientVocabulary: RecommendationCandidateIngredient[],
+) {
+  const unknownIngredients = inputs
+    .filter(
+      (input) =>
+        input.normalized.length === 0 ||
+        !ingredientVocabulary.some((ingredient) =>
+          ingredientMatchesInput(ingredient, input),
+        ),
+    )
+    .map((input) => input.original);
+
+  if (unknownIngredients.length === 0) {
+    return;
+  }
+
+  throw new AppError(
+    422,
+    "UNKNOWN_INGREDIENTS",
+    "Có thành phần không xác định.",
+    { unknownIngredients },
+  );
 }
 
 function roundScore(value: number) {

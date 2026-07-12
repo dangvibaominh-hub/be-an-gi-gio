@@ -1,7 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Pool, PoolClient } from "pg";
 
-import type { RecipeModel } from "../recipes/recipe.model.js";
+import type {
+  RecipeDetailModel,
+  RecipeModel,
+} from "../recipes/recipe.model.js";
 import { normalizeIngredientName } from "./ingredient-normalizer.js";
 import type { GeneratedRecipe } from "./generated-recipe.schema.js";
 import type { RecommendationFilters } from "./recommendation.types.js";
@@ -15,12 +18,16 @@ export interface RecommendationCandidateIngredient {
 
 export interface RecommendationCandidate extends RecipeModel {
   ingredients: RecommendationCandidateIngredient[];
+  ingredientDetails?: RecipeDetailModel["ingredients"];
+  steps?: RecipeDetailModel["steps"];
+  cookingTerms?: RecipeDetailModel["cookingTerms"];
 }
 
 export interface RecommendationRepository {
   listCandidates(
     filters: RecommendationFilters,
   ): Promise<RecommendationCandidate[]>;
+  listIngredientVocabulary(): Promise<RecommendationCandidateIngredient[]>;
 }
 
 export interface SaveGeneratedRecipeInput {
@@ -100,6 +107,15 @@ interface SavedIngredientRow {
   aliases: string[];
 }
 
+interface SavedStepRow {
+  id: string;
+  content: string;
+  estimated_minutes: number;
+  technique_icon: RecipeDetailModel["steps"][number]["techniqueIcon"];
+  is_tricky: boolean;
+  timer_seconds: number | null;
+}
+
 export class PostgresRecommendationRepository
   implements RecommendationRepository
 {
@@ -163,6 +179,16 @@ export class PostgresRecommendationRepository
 
     return mapCandidateRows(result.rows);
   }
+
+  async listIngredientVocabulary(): Promise<RecommendationCandidateIngredient[]> {
+    const result = await this.database.query<SavedIngredientRow>(
+      `SELECT id, name, normalized_name, aliases
+       FROM ingredients
+       ORDER BY name`,
+    );
+
+    return result.rows.map(mapIngredientVocabularyRow);
+  }
 }
 
 export class PostgresGeneratedRecipeRepository
@@ -178,8 +204,12 @@ export class PostgresGeneratedRecipeRepository
 
       const category = await findCategory(client, input.recipe.category);
       const savedRecipe = await insertRecipe(client, input, category.id);
-      const ingredients = await insertIngredients(client, savedRecipe.id, input.recipe);
-      await insertSteps(client, savedRecipe.id, input.recipe);
+      const { matchIngredients, ingredientDetails } = await insertIngredients(
+        client,
+        savedRecipe.id,
+        input.recipe,
+      );
+      const steps = await insertSteps(client, savedRecipe.id, input.recipe);
 
       await client.query("COMMIT");
 
@@ -194,7 +224,10 @@ export class PostgresGeneratedRecipeRepository
         cookTimeMinutes: savedRecipe.cook_time_minutes,
         baseServings: savedRecipe.base_servings,
         category: category.name,
-        ingredients,
+        ingredients: matchIngredients,
+        ingredientDetails,
+        steps,
+        cookingTerms: {},
       };
     } catch (error) {
       await client.query("ROLLBACK");
@@ -266,6 +299,20 @@ export class SupabaseRecommendationRepository
     }
 
     return (data ?? []).map(mapSupabaseCandidateRow);
+  }
+
+  async listIngredientVocabulary(): Promise<RecommendationCandidateIngredient[]> {
+    const { data, error } = await this.database
+      .from("ingredients")
+      .select("id, name, normalized_name, aliases")
+      .order("name", { ascending: true })
+      .returns<SavedIngredientRow[]>();
+
+    if (error !== null) {
+      throw new Error(error.message);
+    }
+
+    return (data ?? []).map(mapIngredientVocabularyRow);
   }
 
   private async findCategoryIds(category: string | undefined) {
@@ -340,6 +387,17 @@ function mapCandidateRows(rows: CandidateRow[]) {
   }
 
   return Array.from(candidates.values());
+}
+
+function mapIngredientVocabularyRow(
+  row: SavedIngredientRow,
+): RecommendationCandidateIngredient {
+  return {
+    id: row.id,
+    name: row.name,
+    normalizedName: row.normalized_name,
+    aliases: row.aliases,
+  };
 }
 
 function mapSupabaseCandidateRow(
@@ -468,7 +526,8 @@ async function insertIngredients(
   recipeId: string,
   recipe: GeneratedRecipe,
 ) {
-  const ingredients: RecommendationCandidateIngredient[] = [];
+  const matchIngredients: RecommendationCandidateIngredient[] = [];
+  const ingredientDetails: RecipeDetailModel["ingredients"] = [];
   const seenNormalizedNames = new Set<string>();
   let displayOrder = 1;
 
@@ -515,16 +574,24 @@ async function insertIngredients(
       ],
     );
 
-    ingredients.push({
+    matchIngredients.push({
       id: savedIngredient.id,
       name: savedIngredient.name,
       normalizedName: savedIngredient.normalized_name,
       aliases: savedIngredient.aliases,
     });
+    ingredientDetails.push({
+      id: savedIngredient.id,
+      name: savedIngredient.name,
+      baseAmount: ingredient.amount,
+      unit: ingredient.unit,
+      prepNote: ingredient.prepNote,
+      haveIt: false,
+    });
     displayOrder += 1;
   }
 
-  return ingredients;
+  return { matchIngredients, ingredientDetails };
 }
 
 async function insertSteps(
@@ -532,8 +599,10 @@ async function insertSteps(
   recipeId: string,
   recipe: GeneratedRecipe,
 ) {
+  const steps: RecipeDetailModel["steps"] = [];
+
   for (const [index, step] of recipe.steps.entries()) {
-    await client.query(
+    const result = await client.query<SavedStepRow>(
       `INSERT INTO recipe_steps (
          recipe_id,
          display_order,
@@ -543,7 +612,14 @@ async function insertSteps(
          is_tricky,
          timer_seconds
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING
+         id,
+         content,
+         estimated_minutes,
+         technique_icon,
+         is_tricky,
+         timer_seconds`,
       [
         recipeId,
         index + 1,
@@ -554,5 +630,21 @@ async function insertSteps(
         step.timerSeconds,
       ],
     );
+    const savedStep = result.rows[0];
+
+    if (savedStep === undefined) {
+      throw new Error(`Generated recipe step was not saved: ${index + 1}`);
+    }
+
+    steps.push({
+      id: savedStep.id,
+      content: savedStep.content,
+      estimatedMinutes: savedStep.estimated_minutes,
+      techniqueIcon: savedStep.technique_icon,
+      isTricky: savedStep.is_tricky,
+      timerSeconds: savedStep.timer_seconds,
+    });
   }
+
+  return steps;
 }

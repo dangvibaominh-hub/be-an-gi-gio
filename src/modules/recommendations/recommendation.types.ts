@@ -1,4 +1,5 @@
 import type {
+  RecipeDetailModel,
   RecipeDifficulty,
   RecipeModel,
 } from "../recipes/recipe.model.js";
@@ -25,7 +26,11 @@ export interface RecommendationMatch {
   missingIngredients: string[];
 }
 
-export interface RecipeRecommendationModel extends RecipeModel {
+export interface RecipeRecommendationModel
+  extends RecipeModel,
+    Partial<
+      Pick<RecipeDetailModel, "ingredients" | "steps" | "cookingTerms">
+    > {
   match: RecommendationMatch;
 }
 
