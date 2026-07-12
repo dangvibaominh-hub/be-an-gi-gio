@@ -308,8 +308,8 @@ describe("RecommendationService", () => {
         ingredients: [
           {
             id: "ingredient-avocado",
-            name: "Bơ",
-            normalizedName: "bo",
+            name: "Bơ sáp",
+            normalizedName: "bo sap",
             aliases: ["avocado"],
           },
         ],

@@ -303,6 +303,16 @@ function ingredientMatchesInput(
     return true;
   }
 
+  const [onlyToken] = input.strictTokens;
+
+  if (
+    input.strictTokens.length === 1 &&
+    onlyToken !== undefined &&
+    tokenizeIngredientNameStrict(ingredient.name).includes(onlyToken)
+  ) {
+    return true;
+  }
+
   const hasFoldedExactMatch = values.some(
     (candidate) => candidate.normalized === input.normalized,
   );
@@ -314,8 +324,6 @@ function ingredientMatchesInput(
   if (input.strictTokens.length > 1) {
     return true;
   }
-
-  const [onlyToken] = input.strictTokens;
 
   return (
     onlyToken !== undefined &&
