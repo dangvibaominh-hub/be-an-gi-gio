@@ -332,6 +332,10 @@ describe("Feedback API", () => {
           "took-longer-than-expected": 1,
           "missing-ingredients": 1,
         },
+        insights: [
+          "Ưu tiên món nhanh hơn thời gian dự kiến.",
+          "Tăng ưu tiên công thức khớp nguyên liệu đang có.",
+        ],
       },
     });
   });

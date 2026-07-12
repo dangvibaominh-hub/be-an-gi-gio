@@ -88,19 +88,19 @@ export function buildInsightMessages(issueCounts: FeedbackIssueCounts) {
   const insights: string[] = [];
 
   if (sumIssueCounts(issueCounts, easyRecipeIssues) > 0) {
-    insights.push("Uu tien cong thuc de thao tac va co buoc lam ro rang.");
+    insights.push("Ưu tiên công thức dễ thao tác và có bước làm rõ ràng.");
   }
 
   if (sumIssueCounts(issueCounts, techniqueGuidanceIssues) > 0) {
-    insights.push("Uu tien cong thuc co huong dan ky thuat va canh vi ro hon.");
+    insights.push("Ưu tiên công thức có hướng dẫn kỹ thuật và canh vị rõ hơn.");
   }
 
   if (sumIssueCounts(issueCounts, quickRecipeIssues) > 0) {
-    insights.push("Uu tien mon nhanh hon thoi gian du kien.");
+    insights.push("Ưu tiên món nhanh hơn thời gian dự kiến.");
   }
 
   if (sumIssueCounts(issueCounts, ingredientFitIssues) > 0) {
-    insights.push("Tang uu tien cong thuc khop nguyen lieu dang co.");
+    insights.push("Tăng ưu tiên công thức khớp nguyên liệu đang có.");
   }
 
   return insights;

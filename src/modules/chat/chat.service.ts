@@ -493,7 +493,7 @@ function buildPersonalizationContext(
   }
 
   const lines = [
-    `Da co ${personalization.feedbackCount} feedback nau an truoc day; do tin cay ${Math.round(
+    `Đã có ${personalization.feedbackCount} feedback nấu ăn trước đây; độ tin cậy ${Math.round(
       personalization.confidence * 100,
     )}%.`,
   ];
@@ -526,30 +526,30 @@ function buildPersonalizationContext(
 
   if (signals.preferQuickRecipes > 0) {
     lines.push(
-      `Nguoi dung hay thay mon nau lau hon du kien (${issueCounts["took-longer-than-expected"]} lan); uu tien goi y mon nhanh va ke hoach nau gon.`,
+      `Người dùng hay thấy món nấu lâu hơn dự kiến (${issueCounts["took-longer-than-expected"]} lần); ưu tiên gợi ý món nhanh và kế hoạch nấu gọn.`,
     );
   }
 
   if (signals.preferEasyRecipes > 0) {
     lines.push(
-      `Nguoi dung tung gap kho khi thao tac cong thuc (${easyIssueCount} lan); uu tien mon de lam va huong dan ro tung buoc.`,
+      `Người dùng từng gặp khó khi thao tác công thức (${easyIssueCount} lần); ưu tiên món dễ làm và hướng dẫn rõ từng bước.`,
     );
   }
 
   if (signals.preferIngredientFit > 0) {
     lines.push(
-      `Nguoi dung hay gap van de ve nguyen lieu/do no (${ingredientFitIssueCount} lan); uu tien cong thuc khop nguyen lieu va goi y cach thay the.`,
+      `Người dùng hay gặp vấn đề về nguyên liệu/độ no (${ingredientFitIssueCount} lần); ưu tiên công thức khớp nguyên liệu và gợi ý cách thay thế.`,
     );
   }
 
   if (signals.preferTechniqueGuidance > 0) {
     lines.push(
-      `Nguoi dung tung gap van de ve ky thuat, do chin hoac can vi (${techniqueIssueCount} lan); khi phu hop hay them meo thao tac va canh vi ro rang.`,
+      `Người dùng từng gặp vấn đề về kỹ thuật, độ chín hoặc canh vị (${techniqueIssueCount} lần); khi phù hợp hãy thêm mẹo thao tác và canh vị rõ ràng.`,
     );
   }
 
   if (personalization.insights.length > 0) {
-    lines.push(`Insight hien co: ${personalization.insights.join(" ")}`);
+    lines.push(`Insight hiện có: ${personalization.insights.join(" ")}`);
   }
 
   return lines.join("\n");

@@ -526,8 +526,8 @@ describe("Chat API", () => {
               "missing-ingredients": 1,
             },
             insights: [
-              "Uu tien mon nhanh hon thoi gian du kien.",
-              "Tang uu tien cong thuc khop nguyen lieu dang co.",
+              "Ưu tiên món nhanh hơn thời gian dự kiến.",
+              "Tăng ưu tiên công thức khớp nguyên liệu đang có.",
             ],
             updatedAt: "2026-07-08T00:00:00.000Z",
           },
@@ -552,9 +552,9 @@ describe("Chat API", () => {
       .send({ content: "Toi nen nau gi nhanh?" });
 
     expect(sendResponse.status).toBe(201);
-    expect(adapter.inputs[0]?.userContext).toContain("feedback nau an");
-    expect(adapter.inputs[0]?.userContext).toContain("mon nau lau hon du kien");
-    expect(adapter.inputs[0]?.userContext).toContain("khop nguyen lieu");
+    expect(adapter.inputs[0]?.userContext).toContain("feedback nấu ăn");
+    expect(adapter.inputs[0]?.userContext).toContain("món nấu lâu hơn dự kiến");
+    expect(adapter.inputs[0]?.userContext).toContain("khớp nguyên liệu");
   });
 
   it("creates a pending Gemini recipe draft from an explicit chat request", async () => {
