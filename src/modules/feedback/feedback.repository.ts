@@ -17,6 +17,7 @@ import type { SubmitFeedbackInput } from "./feedback.types.js";
 import {
   emptyFeedbackIssueCounts,
   emptyPersonalizationInsight,
+  normalizeFeedbackIssues,
 } from "./feedback.model.js";
 
 interface FeedbackSessionRow {
@@ -31,7 +32,7 @@ interface FeedbackRow {
   cooking_session_id: string;
   recipe_id: string;
   rating: number;
-  issues: FeedbackIssue[];
+  issues: unknown;
   note: string | null;
   created_at: Date;
   updated_at: Date;
@@ -39,7 +40,7 @@ interface FeedbackRow {
 
 interface FeedbackSignalRow {
   rating: number;
-  issues: FeedbackIssue[];
+  issues: unknown;
 }
 
 interface PersonalizationRow {
@@ -54,7 +55,7 @@ interface PersonalizationRow {
   oil_splatter_count: number;
   took_longer_than_expected_count: number;
   missing_ingredients_count: number;
-  issue_counts: Record<string, unknown> | null;
+  issue_counts: unknown;
   updated_at: Date;
 }
 
@@ -169,7 +170,7 @@ export class PostgresFeedbackRepository implements FeedbackRepository {
 
     return result.rows.map((row) => ({
       rating: row.rating,
-      issues: row.issues,
+      issues: normalizeFeedbackIssues(row.issues),
     }));
   }
 
@@ -270,7 +271,7 @@ function mapFeedbackRow(row: FeedbackRow): CookingFeedbackModel {
     cookingSessionId: row.cooking_session_id,
     recipeId: row.recipe_id,
     rating: row.rating,
-    issues: row.issues,
+    issues: normalizeFeedbackIssues(row.issues),
     note: row.note,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
@@ -300,7 +301,7 @@ function mapPersonalizationRow(
 
 function normalizeStoredIssueCounts(row: PersonalizationRow) {
   const issueCounts = emptyFeedbackIssueCounts();
-  const storedIssueCounts = row.issue_counts ?? {};
+  const storedIssueCounts = parseStoredIssueCounts(row.issue_counts);
 
   for (const [issue, count] of Object.entries(storedIssueCounts)) {
     if (issue in issueCounts && typeof count === "number" && count >= 0) {
@@ -319,4 +320,22 @@ function normalizeStoredIssueCounts(row: PersonalizationRow) {
     "took-longer-than-expected": row.took_longer_than_expected_count,
     "missing-ingredients": row.missing_ingredients_count,
   } satisfies FeedbackIssueCounts;
+}
+
+function parseStoredIssueCounts(value: unknown): Record<string, unknown> {
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+
+      return isRecord(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  return isRecord(value) ? value : {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

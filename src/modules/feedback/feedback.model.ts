@@ -26,6 +26,25 @@ export const FEEDBACK_ISSUES = [
 
 export type FeedbackIssue = (typeof FEEDBACK_ISSUES)[number];
 
+const feedbackIssueSet = new Set<string>(FEEDBACK_ISSUES);
+
+export function normalizeFeedbackIssues(value: unknown): FeedbackIssue[] {
+  const rawIssues = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? parsePostgresTextArray(value)
+      : [];
+
+  return Array.from(
+    new Set(
+      rawIssues.filter(
+        (issue): issue is FeedbackIssue =>
+          typeof issue === "string" && feedbackIssueSet.has(issue),
+      ),
+    ),
+  );
+}
+
 export const GENERAL_FEEDBACK_ISSUES = [
   "took-longer-than-expected",
   "missing-ingredients",
@@ -195,4 +214,50 @@ export function emptyFeedbackIssueCounts(): FeedbackIssueCounts {
   return Object.fromEntries(
     FEEDBACK_ISSUES.map((issue) => [issue, 0]),
   ) as FeedbackIssueCounts;
+}
+
+function parsePostgresTextArray(value: string) {
+  if (!value.startsWith("{") || !value.endsWith("}")) {
+    return [];
+  }
+
+  const values: string[] = [];
+  const content = value.slice(1, -1);
+  let current = "";
+  let inQuotes = false;
+  let escaping = false;
+
+  for (const character of content) {
+    if (escaping) {
+      current += character;
+      escaping = false;
+      continue;
+    }
+
+    if (character === "\\") {
+      escaping = true;
+      continue;
+    }
+
+    if (character === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+
+    if (character === "," && !inQuotes) {
+      if (current.length > 0) {
+        values.push(current);
+      }
+      current = "";
+      continue;
+    }
+
+    current += character;
+  }
+
+  if (current.length > 0) {
+    values.push(current);
+  }
+
+  return values;
 }

@@ -1,7 +1,7 @@
 import type { Pool } from "pg";
 
 import type { RecipeModel } from "../recipes/recipe.model.js";
-import type { FeedbackIssue } from "../feedback/feedback.model.js";
+import { normalizeFeedbackIssues } from "../feedback/feedback.model.js";
 import type {
   CookingSessionModel,
   CookingSessionStatus,
@@ -22,7 +22,7 @@ interface CookingSessionRow {
   completed_at: Date | null;
   updated_at: Date;
   feedback_rating: number | null;
-  feedback_issues: FeedbackIssue[] | null;
+  feedback_issues: unknown;
   feedback_note: string | null;
   feedback_submitted_at: Date | null;
   total_steps: string;
@@ -279,7 +279,7 @@ function mapCookingSessionRow(row: CookingSessionRow): CookingSessionModel {
         ? null
         : {
             rating: row.feedback_rating,
-            issues: row.feedback_issues ?? [],
+            issues: normalizeFeedbackIssues(row.feedback_issues),
             note: row.feedback_note,
             submittedAt: row.feedback_submitted_at.toISOString(),
           },
