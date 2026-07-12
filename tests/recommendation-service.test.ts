@@ -377,6 +377,142 @@ describe("RecommendationService", () => {
     expect(geminiCalled).toBe(false);
   });
 
+  it("generates a Gemini recipe for a common ingredient missing from the database", async () => {
+    let generatedIngredients: string[] | undefined;
+    const emptyRepository: RecommendationRepository = {
+      listCandidates() {
+        return Promise.resolve([]);
+      },
+      listIngredientVocabulary() {
+        return Promise.resolve([]);
+      },
+    };
+    const recipeGenerationAdapter: RecipeGenerationAdapter = {
+      model: "gemini-test",
+      generateRecipe(input) {
+        generatedIngredients = input.ingredients;
+        return Promise.resolve({
+          title: "Ca Hoi Ap Chao",
+          description: "Mon ca hoi ap chao nhanh voi rau xanh cho bua toi.",
+          imageAlt: "Mieng ca hoi ap chao vang canh",
+          difficulty: "de",
+          cookTimeMinutes: 20,
+          baseServings: 2,
+          category: RECIPE_CATEGORIES[0],
+          ingredients: [
+            {
+              name: "C\u00e1 h\u1ed3i",
+              amount: 300,
+              unit: "g",
+              prepNote: "Tham kho",
+            },
+            {
+              name: "Dau olive",
+              amount: 1,
+              unit: "muong canh",
+              prepNote: "",
+            },
+          ],
+          steps: [
+            {
+              content: "Uop ca hoi voi muoi tieu trong vai phut cho tham.",
+              estimatedMinutes: 5,
+              techniqueIcon: "tron",
+              isTricky: false,
+              timerSeconds: null,
+            },
+            {
+              content: "Ap chao mat da truoc den khi vang roi lat mat con lai.",
+              estimatedMinutes: 10,
+              techniqueIcon: "chao",
+              isTricky: true,
+              timerSeconds: null,
+            },
+          ],
+        });
+      },
+    };
+    const generatedRecipeRepository: GeneratedRecipeRepository = {
+      save(input) {
+        return Promise.resolve({
+          id: "generated-salmon",
+          slug: input.slug,
+          title: input.recipe.title,
+          description: input.recipe.description,
+          image: "/images/recipes/gemini-generated.png",
+          imageAlt: input.recipe.imageAlt,
+          difficulty: input.recipe.difficulty,
+          cookTimeMinutes: input.recipe.cookTimeMinutes,
+          baseServings: input.recipe.baseServings,
+          category: input.recipe.category,
+          ingredients: [
+            {
+              id: "ingredient-salmon",
+              name: "C\u00e1 h\u1ed3i",
+              normalizedName: "ca hoi",
+              aliases: [],
+            },
+            {
+              id: "ingredient-oil",
+              name: "Dau olive",
+              normalizedName: "dau olive",
+              aliases: [],
+            },
+          ],
+          ingredientDetails: input.recipe.ingredients.map((ingredient, index) => ({
+            id: `ingredient-${index + 1}`,
+            name: ingredient.name,
+            baseAmount: ingredient.amount,
+            unit: ingredient.unit,
+            prepNote: ingredient.prepNote,
+            haveIt: false,
+          })),
+          steps: input.recipe.steps.map((step, index) => ({
+            id: `step-${index + 1}`,
+            content: step.content,
+            estimatedMinutes: step.estimatedMinutes,
+            techniqueIcon: step.techniqueIcon,
+            isTricky: step.isTricky,
+            timerSeconds: step.timerSeconds,
+          })),
+          cookingTerms: {},
+        });
+      },
+    };
+    const service = new RecommendationService(
+      emptyRepository,
+      0.55,
+      undefined,
+      recipeGenerationAdapter,
+      generatedRecipeRepository,
+    );
+
+    const result = await service.recommend({
+      ingredients: ["c\u00e1 h\u1ed3i"],
+      filters: {},
+      page: 1,
+      limit: 12,
+    });
+
+    expect(generatedIngredients).toEqual(["c\u00e1 h\u1ed3i"]);
+    expect(result.source).toBe("gemini");
+    expect(result.items[0]?.slug.startsWith("gemini-")).toBe(true);
+    expect(result.items[0]?.ingredients).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "C\u00e1 h\u1ed3i",
+          baseAmount: 300,
+        }),
+      ]),
+    );
+    expect(result.items[0]?.steps).toHaveLength(2);
+    expect(result.items[0]?.cookingTerms).toEqual({});
+    expect(result.items[0]?.match).toMatchObject({
+      matchedIngredients: ["c\u00e1 h\u1ed3i"],
+      missingIngredients: ["Dau olive"],
+    });
+  });
+
   it("reranks recommendations with personalization preferences", async () => {
     const personalizedCandidates: RecommendationCandidate[] = [
           {

@@ -347,11 +347,15 @@ function assertKnownIngredients(
   inputs: NormalizedInput[],
   ingredientVocabulary: RecommendationCandidateIngredient[],
 ) {
+  const knownIngredients = [
+    ...ingredientVocabulary,
+    ...commonIngredientVocabulary,
+  ];
   const unknownIngredients = inputs
     .filter(
       (input) =>
         input.normalized.length === 0 ||
-        !ingredientVocabulary.some((ingredient) =>
+        !knownIngredients.some((ingredient) =>
           ingredientMatchesInput(ingredient, input),
         ),
     )
@@ -367,6 +371,68 @@ function assertKnownIngredients(
     "Có thành phần không xác định.",
     { unknownIngredients },
   );
+}
+
+const commonIngredientVocabulary = createCommonIngredientVocabulary([
+  "c\u00e1 h\u1ed3i",
+  "c\u00e1 ng\u1eeb",
+  "c\u00e1 thu",
+  "c\u00e1 basa",
+  "c\u00e1 ch\u1ebdm",
+  "c\u00e1 tr\u00ea",
+  "c\u00e1 r\u00f4 phi",
+  "t\u00f4m s\u00fa",
+  "t\u00f4m th\u1ebb",
+  "m\u1ef1c",
+  "ngh\u00eau",
+  "s\u00f2",
+  "h\u1ebfn",
+  "th\u1ecbt heo",
+  "th\u1ecbt l\u1ee3n",
+  "ba ch\u1ec9 heo",
+  "\u1ee9c g\u00e0",
+  "\u0111\u00f9i g\u00e0",
+  "c\u00e1nh g\u00e0",
+  "tr\u1ee9ng v\u1ecbt",
+  "khoai t\u00e2y",
+  "khoai lang",
+  "b\u00ed \u0111\u1ecf",
+  "b\u00ed ng\u00f2i",
+  "c\u1ea3i th\u00eca",
+  "c\u1ea3i b\u00f3 x\u00f4i",
+  "c\u1ea3i xo\u0103n",
+  "b\u1eafp c\u1ea3i",
+  "d\u01b0a leo",
+  "c\u00e0 t\u00edm",
+  "b\u01a1",
+  "chu\u1ed1i",
+  "xo\u00e0i",
+  "t\u00e1o",
+  "l\u00ea",
+  "d\u00e2u t\u00e2y",
+  "y\u1ebfn m\u1ea1ch",
+  "nui",
+  "m\u00ec",
+  "b\u00fan",
+  "ph\u00f4 mai",
+  "s\u1eefa",
+  "s\u1eefa chua",
+  "kim chi",
+  "rong bi\u1ec3n",
+  "salmon",
+  "tuna",
+  "avocado",
+]);
+
+function createCommonIngredientVocabulary(
+  names: string[],
+): RecommendationCandidateIngredient[] {
+  return names.map((name) => ({
+    id: `common-${normalizeIngredientName(name).replace(/\s+/g, "-")}`,
+    name,
+    normalizedName: normalizeIngredientName(name),
+    aliases: [],
+  }));
 }
 
 function roundScore(value: number) {
